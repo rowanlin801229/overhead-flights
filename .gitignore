@@ -18,3 +18,8 @@ xcuserdata/
 # Logs
 *.log
 /tmp/
+
+# Local screen captures (use overhead-flights-demo.mp4 instead)
+portfolio/assets/demo.mp4
+portfolio/assets/demo-web.mp4
+portfolio/assets/hero.png

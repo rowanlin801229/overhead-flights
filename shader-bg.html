@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <!--
+    Etheral Shadow–style ambient bg for macOS screensaver.
+    Inspired by: https://21st.dev/@jatin-yadav05/components/etheral-shadow
+    Fully self-contained (no remote mask/noise URLs — those fail silently in
+    legacyScreenSaver WKWebView). Canvas only. No flight text here.
+  -->
+  <style>
+    html, body {
+      margin: 0; padding: 0; width: 100%; height: 100%;
+      overflow: hidden; background: #000;
+    }
+    canvas {
+      position: fixed; inset: 0; width: 100%; height: 100%;
+      display: block; background: #000;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="c" aria-hidden="true"></canvas>
+  <script>
+  (() => {
+    'use strict';
+
+    const canvas = document.getElementById('c');
+    const ctx = canvas.getContext('2d', { alpha: false });
+    if (!ctx) return;
+
+    // Demo defaults from 21st: animation scale 100, speed 90, gray shadow
+    const SHADOW = { r: 128, g: 128, b: 128 };
+    const SPEED = 0.22; // higher = more motion (screensaver needs to read as “alive”)
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+    let w = 0, h = 0, dpr = 1;
+    let noiseCanvas = null;
+    let noiseCtx = null;
+    let t0 = performance.now();
+
+    function resize() {
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      const cssW = Math.max(1, window.innerWidth || document.documentElement.clientWidth || 800);
+      const cssH = Math.max(1, window.innerHeight || document.documentElement.clientHeight || 600);
+      const nw = Math.floor(cssW * dpr);
+      const nh = Math.floor(cssH * dpr);
+      if (nw === w && nh === h) return;
+      w = nw; h = nh;
+      canvas.width = w;
+      canvas.height = h;
+      // grain tile
+      noiseCanvas = document.createElement('canvas');
+      noiseCanvas.width = 128;
+      noiseCanvas.height = 128;
+      noiseCtx = noiseCanvas.getContext('2d');
+      bakeNoise();
+    }
+
+    function bakeNoise() {
+      if (!noiseCtx) return;
+      const img = noiseCtx.createImageData(128, 128);
+      const d = img.data;
+      for (let i = 0; i < d.length; i += 4) {
+        const g = (Math.random() * 255) | 0;
+        d[i] = d[i + 1] = d[i + 2] = g;
+        d[i + 3] = 255;
+      }
+      noiseCtx.putImageData(img, 0, 0);
+    }
+
+    // Lightweight value noise (no external assets)
+    function hash2(x, y) {
+      const s = Math.sin(x * 127.1 + y * 311.7) * 43758.5453;
+      return s - Math.floor(s);
+    }
+    function smoothNoise(x, y) {
+      const x0 = Math.floor(x), y0 = Math.floor(y);
+      const fx = x - x0, fy = y - y0;
+      const u = fx * fx * (3 - 2 * fx);
+      const v = fy * fy * (3 - 2 * fy);
+      const a = hash2(x0, y0);
+      const b = hash2(x0 + 1, y0);
+      const c = hash2(x0, y0 + 1);
+      const d = hash2(x0 + 1, y0 + 1);
+      return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+    }
+    function fbm(x, y) {
+      let v = 0, a = 0.5, f = 1;
+      for (let i = 0; i < 4; i++) {
+        v += a * smoothNoise(x * f, y * f);
+        f *= 2.02;
+        a *= 0.5;
+      }
+      return v;
+    }
+
+    function draw(now) {
+      resize();
+      if (w < 2 || h < 2) return;
+
+      const t = reduce ? 0 : (now - t0) * 0.001 * SPEED;
+
+      // Pure black base
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, w, h);
+
+      // Soft ethereal mass — warped radial field (like masked gray cloud + undulation)
+      const img = ctx.createImageData(w, h);
+      const data = img.data;
+      const cx = w * 0.5;
+      const cy = h * 0.48;
+      const rx = w * 0.42;
+      const ry = h * 0.38;
+
+      // Downsample for performance: paint at half res then scale up
+      const sw = Math.max(1, (w / 2) | 0);
+      const sh = Math.max(1, (h / 2) | 0);
+      const small = ctx.createImageData(sw, sh);
+      const sd = small.data;
+
+      for (let y = 0; y < sh; y++) {
+        for (let x = 0; x < sw; x++) {
+          const px = (x + 0.5) / sw;
+          const py = (y + 0.5) / sh;
+          // domain warp (ethereal undulation)
+          const wx = fbm(px * 2.2 + t * 0.35, py * 2.0 - t * 0.28);
+          const wy = fbm(px * 2.0 - t * 0.22 + 5.1, py * 2.3 + t * 0.31);
+          const qx = px + (wx - 0.5) * 0.22;
+          const qy = py + (wy - 0.5) * 0.22;
+
+          const dx = (qx * w - cx) / rx;
+          const dy = (qy * h - cy) / ry;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+
+          // soft edge like the Framer mask blob
+          let mask = 1 - smoothstep(0.35, 1.15, dist);
+          // internal structure
+          const grain = fbm(qx * 3.5 + t * 0.4, qy * 3.2 - t * 0.35);
+          mask *= 0.55 + grain * 0.55;
+          mask = Math.max(0, Math.min(1, mask));
+          mask = Math.pow(mask, 1.35);
+
+          // gray ethereal (128) into black — keep subtle so type stays readable
+          const a = mask * 0.55;
+          const i = (y * sw + x) * 4;
+          sd[i] = SHADOW.r;
+          sd[i + 1] = SHADOW.g;
+          sd[i + 2] = SHADOW.b;
+          sd[i + 3] = (a * 255) | 0;
+        }
+      }
+
+      // blit small → full with smoothing
+      const tmp = document.createElement('canvas');
+      tmp.width = sw;
+      tmp.height = sh;
+      tmp.getContext('2d').putImageData(small, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(tmp, 0, 0, w, h);
+
+      // film grain layer (animated by rebaking occasionally + scroll)
+      if (noiseCanvas) {
+        if (!reduce && ((now / 80) | 0) % 3 === 0) bakeNoise();
+        ctx.save();
+        ctx.globalAlpha = 0.07;
+        ctx.globalCompositeOperation = 'soft-light';
+        const ox = reduce ? 0 : ((now * 0.02) | 0) % 128;
+        const oy = reduce ? 0 : ((now * 0.015) | 0) % 128;
+        const pat = ctx.createPattern(noiseCanvas, 'repeat');
+        if (pat) {
+          ctx.translate(ox, oy);
+          ctx.fillStyle = pat;
+          ctx.fillRect(-ox, -oy, w + 128, h + 128);
+        }
+        ctx.restore();
+      }
+    }
+
+    function smoothstep(e0, e1, x) {
+      const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+      return t * t * (3 - 2 * t);
+    }
+
+    // Dual timers: rAF + setInterval (screensaver often freezes rAF)
+    let raf = 0;
+    function loop(now) {
+      draw(now || performance.now());
+      raf = requestAnimationFrame(loop);
+    }
+    resize();
+    draw(performance.now());
+    requestAnimationFrame(loop);
+    window.setInterval(() => draw(performance.now()), 50); // ~20fps backup
+    window.addEventListener('resize', () => {
+      w = h = 0;
+      draw(performance.now());
+    });
+  })();
+  </script>
+</body>
+</html>

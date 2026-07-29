@@ -1,0 +1,1257 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#000000" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+  <meta name="description" content="安靜顯示正飛過你頭頂的航班" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <title>頭頂航班</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html, body {
+      height: 100%;
+      background: #000;
+      /* Soft silver — less solid white, more airy */
+      color: rgba(236, 236, 238, 0.88);
+      font-family: "SF Pro Display", "Segoe UI", system-ui, -apple-system, sans-serif;
+      overflow: hidden;
+      cursor: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100dvh;
+      padding: env(safe-area-inset-top) env(safe-area-inset-right)
+               env(safe-area-inset-bottom) env(safe-area-inset-left);
+      position: relative;
+    }
+
+    /* ShaderGradient-style plane (monochrome) — canvas WebGL */
+    #shader-bg {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 0;
+      pointer-events: none;
+      display: block;
+      background: #000;
+    }
+
+    #stage {
+      position: relative;
+      z-index: 1;
+      width: min(92vw, 42rem);
+      min-height: 40vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      animation: drift 240s ease-in-out infinite alternate;
+      will-change: transform;
+    }
+
+    @keyframes drift {
+      0%   { transform: translate(0, 0); }
+      25%  { transform: translate(6px, -4px); }
+      50%  { transform: translate(-5px, 5px); }
+      75%  { transform: translate(4px, 3px); }
+      100% { transform: translate(-3px, -6px); }
+    }
+
+    /* Just a little float — vertical ease, almost no tilt */
+    @keyframes floaty {
+      0%   { transform: translate3d(0, 0, 0); }
+      50%  { transform: translate3d(0, -3px, 0); }
+      100% { transform: translate3d(0, 1px, 0); }
+    }
+
+    #card {
+      position: relative;
+      width: 100%;
+      text-align: center;
+      opacity: 0;
+      transition: opacity 1.15s ease;
+      pointer-events: none;
+    }
+
+    #card.visible {
+      opacity: 1;
+    }
+
+    .copy {
+      position: relative;
+      z-index: 1;
+      transform-origin: 50% 50%;
+      animation: floaty 9s ease-in-out infinite alternate;
+    }
+
+    #prologue {
+      position: absolute;
+      inset: 50% auto auto 50%;
+      /* Wider canvas so the arc can read across the card */
+      width: min(72vmin, 34rem);
+      height: min(28vmin, 12rem);
+      transform: translate(-50%, -50%);
+      overflow: visible;
+      opacity: 0;
+      transition: opacity 0.28s ease;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    #prologue.visible {
+      opacity: 1;
+    }
+
+    #prologue-line {
+      stroke: url(#meteor-stroke);
+      stroke-width: 2.4;
+      stroke-linecap: round;
+      fill: none;
+      vector-effect: non-scaling-stroke;
+    }
+
+    #prologue-guide {
+      stroke: none;
+      fill: none;
+    }
+
+    #prologue-glow {
+      stroke: url(#meteor-glow);
+      stroke-width: 5.2;
+      stroke-linecap: round;
+      fill: none;
+      opacity: 0.68;
+      filter: blur(2.5px);
+    }
+
+    .hero {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .monogram {
+      min-height: 0.9rem;
+      font-size: clamp(0.95rem, 2.8vw, 1.15rem);
+      font-weight: 300;
+      letter-spacing: 0.28em;
+      color: rgba(232, 232, 232, 0.38);
+    }
+
+    .monogram:empty {
+      display: none;
+    }
+
+    .callsign {
+      font-size: clamp(2.2rem, 7.5vw, 3.6rem);
+      font-weight: 200;
+      letter-spacing: 0.16em;
+      line-height: 1.12;
+      font-variant-numeric: tabular-nums;
+      color: rgba(240, 240, 242, 0.86);
+    }
+
+    .segment {
+      opacity: 0;
+      transform: translateY(5px);
+      transition:
+        opacity 1.45s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 1.45s cubic-bezier(0.22, 1, 0.36, 1);
+      transition-delay: var(--segment-delay, 0ms);
+    }
+
+    #card.text-visible .segment {
+      opacity: 1;
+      transform: translateY(0);
+    }
+
+    .airline {
+      margin-top: 0.85rem;
+      font-size: clamp(1.15rem, 3.4vw, 1.55rem);
+      font-weight: 300;
+      letter-spacing: 0.12em;
+      color: rgba(232, 232, 232, 0.58);
+    }
+
+    .destination {
+      margin-top: 0.45rem;
+      font-size: clamp(1.05rem, 3.1vw, 1.4rem);
+      font-weight: 300;
+      letter-spacing: 0.1em;
+      color: rgba(232, 232, 232, 0.44);
+    }
+
+    .destination:empty,
+    .airline:empty {
+      display: none;
+    }
+
+    .meta {
+      margin-top: 1.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.65rem 1.5rem;
+      justify-content: center;
+      font-size: clamp(1rem, 3vw, 1.3rem);
+      font-weight: 300;
+      letter-spacing: 0.14em;
+      color: rgba(232, 232, 232, 0.38);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .meta span:empty { display: none; }
+
+    #hero { --segment-delay: 0ms; }
+    #airline { --segment-delay: 300ms; }
+    #destination { --segment-delay: 560ms; }
+    .meta.segment { --segment-delay: 860ms; }
+
+    @media (max-width: 480px) and (orientation: portrait) {
+      .callsign { letter-spacing: 0.08em; }
+      .meta { margin-top: 1.4rem; gap: 0.5rem 1.1rem; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      #stage { animation: none; }
+      #card { transition: opacity 0.2s ease; }
+      .copy { animation: none; }
+      #prologue { display: none; }
+      .segment {
+        transform: none;
+        transition: opacity 0.2s ease;
+        transition-delay: 0ms;
+      }
+    }
+
+    /* macOS .saver: skip rAF-dependent entrance; force readable text immediately */
+    html.overhead-native #stage { animation: none; }
+    html.overhead-native .copy { animation: none; }
+    html.overhead-native #prologue { display: none !important; }
+    html.overhead-native #card {
+      opacity: 1;
+      transition: none;
+    }
+    html.overhead-native #card .segment {
+      opacity: 1;
+      transform: none;
+      transition: none;
+      transition-delay: 0ms;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="shader-bg" aria-hidden="true"></canvas>
+  <div id="stage" aria-live="polite" aria-atomic="true">
+    <div id="card">
+      <svg id="prologue" viewBox="0 0 100 100" aria-hidden="true" preserveAspectRatio="none">
+        <defs>
+          <linearGradient id="meteor-stroke" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#e8e8e8" stop-opacity="0.02"></stop>
+            <stop offset="28%" stop-color="#e8e8e8" stop-opacity="0.14"></stop>
+            <stop offset="68%" stop-color="#e8e8e8" stop-opacity="0.36"></stop>
+            <stop offset="100%" stop-color="#ffffff" stop-opacity="0.92"></stop>
+          </linearGradient>
+          <linearGradient id="meteor-glow" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stop-color="#e8e8e8" stop-opacity="0"></stop>
+            <stop offset="52%" stop-color="#e8e8e8" stop-opacity="0.08"></stop>
+            <stop offset="100%" stop-color="#ffffff" stop-opacity="0.4"></stop>
+          </linearGradient>
+        </defs>
+        <path id="prologue-guide" d="M 50 50 Q 50 50 50 50"></path>
+        <path id="prologue-glow" d="M 50 50 Q 50 50 50 50"></path>
+        <path id="prologue-line" d="M 50 50 Q 50 50 50 50"></path>
+      </svg>
+      <div class="copy">
+        <div class="hero segment" id="hero">
+          <div class="monogram" id="monogram" aria-hidden="true"></div>
+          <div class="callsign" id="callsign"></div>
+        </div>
+        <div class="airline segment" id="airline"></div>
+        <div class="destination segment" id="destination"></div>
+        <div class="meta segment">
+          <span id="altitude"></span>
+          <span id="bearing"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  (() => {
+    'use strict';
+
+    const POLL_MS = 90_000;
+    // ~40 km: still “nearby” but realistic for cities (e.g. Taipei) where traffic sits on approach/departure paths.
+    const RADIUS_KM = 40;
+    const RADIUS_NM = RADIUS_KM / 1.852;
+    const MIN_ALT_M = 500;
+    // Wembley Park / NW London — used when GPS unavailable (screensaver often has no Location Services entry).
+    const DEFAULT_POS = { lat: 51.5578, lon: -0.2795 };
+    const LS_POS_KEY = 'overhead-flights:pos';
+    const DEST_CACHE_PREFIX = 'overhead-flights:dest:';
+    const CARD_FADE_MS = 1000;
+    const BLACK_GAP_MS = 120;
+    const PROLOGUE_MS = 1300;
+
+    const API_POINT = (lat, lon, nm) =>
+      `https://api.airplanes.live/v2/point/${lat}/${lon}/${nm.toFixed(2)}`;
+
+    const ADSBDB_CALLSIGN = (cs) =>
+      `https://api.adsbdb.com/v0/callsign/${encodeURIComponent(cs)}`;
+
+    const AIRLINE_ICAO = {
+      BAW: 'British Airways', SHT: 'British Airways', CFE: 'BA CityFlyer',
+      EZY: 'easyJet', EJU: 'easyJet', EZJ: 'easyJet',
+      RYR: 'Ryanair', RUK: 'Ryanair UK',
+      TOM: 'TUI', EXS: 'Jet2',
+      VIR: 'Virgin Atlantic', VLG: 'Vueling',
+      AFR: 'Air France', DLH: 'Lufthansa', KLM: 'KLM', KLC: 'KLM Cityhopper',
+      UAL: 'United', AAL: 'American', DAL: 'Delta',
+      SIA: 'Singapore Airlines', CPA: 'Cathay Pacific', ANA: 'ANA', JAL: 'JAL',
+      QFA: 'Qantas', UAE: 'Emirates', ETD: 'Etihad', QTR: 'Qatar Airways',
+      THY: 'Turkish Airlines', SAS: 'SAS', FIN: 'Finnair', IBE: 'Iberia',
+      AUA: 'Austrian', SWR: 'Swiss', EIN: 'Aer Lingus', ICE: 'Icelandair',
+      WZZ: 'Wizz Air', NAX: 'Norwegian',
+      CAL: 'China Airlines', EVA: 'EVA Air', TNA: 'Mandarin Airlines',
+      CXA: 'XiamenAir', CCA: 'Air China', CES: 'China Eastern', CSN: 'China Southern',
+      JBU: 'JetBlue', SWA: 'Southwest', ASA: 'Alaska', FFT: 'Frontier',
+      BER: 'airberlin', GWI: 'Germanwings', EWG: 'Eurowings',
+      AUR: 'Aurigny', LOG: 'Loganair', BEE: 'Flybe',
+    };
+
+    const el = {
+      card: document.getElementById('card'),
+      prologue: document.getElementById('prologue'),
+      prologueGuide: document.getElementById('prologue-guide'),
+      prologueGlow: document.getElementById('prologue-glow'),
+      prologueLine: document.getElementById('prologue-line'),
+      monogram: document.getElementById('monogram'),
+      callsign: document.getElementById('callsign'),
+      airline: document.getElementById('airline'),
+      destination: document.getElementById('destination'),
+      altitude: document.getElementById('altitude'),
+      bearing: document.getElementById('bearing'),
+    };
+
+    let userPos = { ...DEFAULT_POS };
+    let pollTimer = null;
+    let wakeLock = null;
+    let currentFlightKey = null;
+    let sequenceToken = 0;
+    let activeFlightToken = 0;
+    let prologueFrame = null;
+    // Set by macOS screensaver (native NSURLSession). WebKit fetch is unreliable inside .saver.
+    let nativeFeedOnly = Boolean(window.__OVERHEAD_NATIVE_FEED__);
+    let nativeNearest = null; // { ac-like, distKm, altM } or null after a native empty payload
+    let hasNativePayload = false;
+    const motionQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    let reduceMotion = motionQuery.matches;
+
+    function haversineKm(lat1, lon1, lat2, lon2) {
+      const R = 6371;
+      const toRad = (d) => (d * Math.PI) / 180;
+      const dLat = toRad(lat2 - lat1);
+      const dLon = toRad(lon2 - lon1);
+      const a =
+        Math.sin(dLat / 2) ** 2 +
+        Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+      return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
+    function bearingDeg(lat1, lon1, lat2, lon2) {
+      const toRad = (d) => (d * Math.PI) / 180;
+      const toDeg = (r) => (r * 180) / Math.PI;
+      const phi1 = toRad(lat1);
+      const phi2 = toRad(lat2);
+      const deltaLambda = toRad(lon2 - lon1);
+      const y = Math.sin(deltaLambda) * Math.cos(phi2);
+      const x =
+        Math.cos(phi1) * Math.sin(phi2) -
+        Math.sin(phi1) * Math.cos(phi2) * Math.cos(deltaLambda);
+      return (toDeg(Math.atan2(y, x)) + 360) % 360;
+    }
+
+    function bearingLabel(deg) {
+      const dirs = ['North', 'Northeast', 'East', 'Southeast', 'South', 'Southwest', 'West', 'Northwest'];
+      return dirs[Math.round(deg / 45) % 8];
+    }
+
+    function altBaroToMeters(alt) {
+      if (alt == null || alt === 'ground') return null;
+      const n = Number(alt);
+      if (!Number.isFinite(n)) return null;
+      return n * 0.3048;
+    }
+
+    function formatAltitude(meters) {
+      if (meters == null) return '';
+      const ft = Math.round(meters / 0.3048);
+      const m = Math.round(meters);
+      return `${m.toLocaleString('en-US')} m · ${ft.toLocaleString('en-US')} ft`;
+    }
+
+    function cleanCallsign(raw) {
+      return String(raw || '').trim().toUpperCase().replace(/\s+/g, '');
+    }
+
+    function airlineFromCallsign(cs) {
+      if (!cs || cs.length < 3) return '';
+      return AIRLINE_ICAO[cs.slice(0, 3)] || '';
+    }
+
+    function sleep(ms) {
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
+    }
+
+    function flightKeyFor(ac) {
+      return cleanCallsign(ac?.flight) || ac?.hex?.toUpperCase() || '';
+    }
+
+    function getMonogram(callsign, iata) {
+      if (iata) return iata.slice(0, 2);
+      const prefix = String(callsign || '').match(/^[A-Z]{1,3}/)?.[0] || '';
+      return prefix || '';
+    }
+
+    function formatRoute(originLabel, destLabel) {
+      if (originLabel && destLabel) return `${originLabel} → ${destLabel}`;
+      return destLabel || originLabel || '';
+    }
+
+    function renderDestination(value) {
+      el.destination.textContent = value || '';
+    }
+
+    function applyView(view) {
+      el.monogram.textContent = view.monogram || '';
+      el.callsign.textContent = view.callsign;
+      el.airline.textContent = view.airline || '';
+      renderDestination(view.destination);
+      el.altitude.textContent = formatAltitude(view.altM);
+      el.bearing.textContent = view.bearing || '';
+    }
+
+    function updateFlightDetails(view) {
+      if (view.airline) el.airline.textContent = view.airline;
+      if (view.destination) renderDestination(view.destination);
+      el.altitude.textContent = formatAltitude(view.altM);
+      el.bearing.textContent = view.bearing || '';
+    }
+
+    function resetTextEntrance() {
+      el.card.classList.remove('text-visible');
+    }
+
+    function revealText() {
+      if (reduceMotion) {
+        el.card.classList.add('text-visible');
+        return;
+      }
+      window.requestAnimationFrame(() => {
+        el.card.classList.add('text-visible');
+      });
+    }
+
+    function clearCardContent() {
+      el.monogram.textContent = '';
+      el.callsign.textContent = '';
+      el.airline.textContent = '';
+      el.destination.textContent = '';
+      el.altitude.textContent = '';
+      el.bearing.textContent = '';
+      clearPrologue();
+    }
+
+    function clearPrologue() {
+      if (prologueFrame != null) {
+        cancelAnimationFrame(prologueFrame);
+        prologueFrame = null;
+      }
+      el.prologue.classList.remove('visible');
+      el.prologueGlow.style.transition = 'none';
+      el.prologueLine.style.transition = 'none';
+      el.prologueGuide.setAttribute('d', 'M 50 50 Q 50 50 50 50');
+      el.prologueGlow.setAttribute('d', 'M 50 50 Q 50 50 50 50');
+      el.prologueLine.setAttribute('d', 'M 50 50 Q 50 50 50 50');
+    }
+
+    async function playPrologue(token) {
+      if (reduceMotion || token !== sequenceToken) return;
+
+      // Path is entirely in SVG viewBox units (0–100). Never use pixel window size here.
+      // Wider horizontal sweep (readable arc, still quiet).
+      const spanX = 88;
+      const arcH = 14;
+      const x1 = 50 - spanX / 2;
+      const y1 = 62;
+      const x2 = 50 + spanX / 2;
+      const y2 = 62;
+      const cx = 50;
+      const cy = 62 - arcH;
+
+      clearPrologue();
+      const guideD = `M ${x1.toFixed(2)} ${y1.toFixed(2)} Q ${cx.toFixed(2)} ${cy.toFixed(2)} ${x2.toFixed(2)} ${y2.toFixed(2)}`;
+      el.prologueGuide.setAttribute('d', guideD);
+      const pathLength = el.prologueGuide.getTotalLength();
+      if (!Number.isFinite(pathLength) || pathLength <= 0) return;
+
+      const startPoint = el.prologueGuide.getPointAtLength(0);
+      const stubPoint = el.prologueGuide.getPointAtLength(pathLength * 0.06);
+      const stubD = `M ${startPoint.x.toFixed(2)} ${startPoint.y.toFixed(2)} L ${stubPoint.x.toFixed(2)} ${stubPoint.y.toFixed(2)}`;
+      el.prologueGlow.setAttribute('d', stubD);
+      el.prologueLine.setAttribute('d', stubD);
+      el.prologue.classList.add('visible');
+      await sleep(140);
+      if (token !== sequenceToken) return;
+      const startAt = performance.now();
+
+      await new Promise((resolve) => {
+        const trailPoints = [
+          { x: startPoint.x, y: startPoint.y },
+          { x: stubPoint.x, y: stubPoint.y },
+        ];
+        const buildTrailPath = (points) => {
+          if (points.length === 0) return 'M 50 50';
+          if (points.length === 1) return `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
+          return `M ${points.map((point) => `${point.x.toFixed(2)} ${point.y.toFixed(2)}`).join(' L ')}`;
+        };
+
+        const step = (now) => {
+          if (token !== sequenceToken) {
+            prologueFrame = null;
+            resolve();
+            return;
+          }
+
+          const progress = Math.min((now - startAt) / PROLOGUE_MS, 1);
+          const point = el.prologueGuide.getPointAtLength(pathLength * progress);
+          trailPoints.push({ x: point.x, y: point.y });
+          if (trailPoints.length > 14) trailPoints.shift();
+
+          const trailD = buildTrailPath(trailPoints);
+          el.prologueGlow.setAttribute('d', trailD);
+          el.prologueLine.setAttribute('d', trailD);
+
+          if (progress >= 1) {
+            prologueFrame = null;
+            resolve();
+            return;
+          }
+
+          prologueFrame = requestAnimationFrame(step);
+        };
+
+        prologueFrame = requestAnimationFrame(step);
+      });
+
+      if (token !== sequenceToken) return;
+      el.prologue.classList.remove('visible');
+    }
+
+    function loadCachedPos() {
+      try {
+        const raw = localStorage.getItem(LS_POS_KEY);
+        if (!raw) return null;
+        const p = JSON.parse(raw);
+        if (typeof p.lat === 'number' && typeof p.lon === 'number') return p;
+      } catch (_) {}
+      return null;
+    }
+
+    function savePos(pos) {
+      try {
+        localStorage.setItem(LS_POS_KEY, JSON.stringify(pos));
+      } catch (_) {}
+    }
+
+    function getPosition(onUpdate) {
+      return new Promise((resolve) => {
+        // 螢保原生端可注入 window.__OVERHEAD_FIXED_POS__ = { lat, lon }
+        const fixed = window.__OVERHEAD_FIXED_POS__;
+        if (
+          fixed &&
+          typeof fixed.lat === 'number' &&
+          typeof fixed.lon === 'number' &&
+          Number.isFinite(fixed.lat) &&
+          Number.isFinite(fixed.lon)
+        ) {
+          userPos = { lat: fixed.lat, lon: fixed.lon };
+          savePos(userPos);
+          resolve(userPos);
+          return;
+        }
+
+        const cached = loadCachedPos();
+        const initial = cached || { ...DEFAULT_POS };
+        userPos = initial;
+        resolve(initial);
+
+        if (!navigator.geolocation) return;
+
+        navigator.geolocation.getCurrentPosition(
+          (pos) => {
+            const next = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+            userPos = next;
+            savePos(next);
+            if (typeof onUpdate === 'function') onUpdate(next);
+          },
+          () => {},
+          { enableHighAccuracy: false, timeout: 12_000, maximumAge: 600_000 }
+        );
+      });
+    }
+
+    function readDestCache(cs) {
+      try {
+        const raw = sessionStorage.getItem(DEST_CACHE_PREFIX + cs);
+        if (raw == null) return undefined;
+        return JSON.parse(raw);
+      } catch (_) {
+        return undefined;
+      }
+    }
+
+    function writeDestCache(cs, value) {
+      try {
+        sessionStorage.setItem(DEST_CACHE_PREFIX + cs, JSON.stringify(value));
+      } catch (_) {}
+    }
+
+    async function fetchDestination(callsign) {
+      const cs = cleanCallsign(callsign);
+      if (!cs) return null;
+
+      const cached = readDestCache(cs);
+      if (cached !== undefined) return cached;
+
+      try {
+        const res = await fetch(ADSBDB_CALLSIGN(cs), {
+          headers: { Accept: 'application/json' },
+        });
+        if (!res.ok) {
+          writeDestCache(cs, null);
+          return null;
+        }
+
+        const data = await res.json();
+        const route = data?.response?.flightroute;
+        const dest = route?.destination;
+        const origin = route?.origin;
+        const airline = route?.airline;
+        const buildLabel = (place) => {
+          const city = place?.municipality || '';
+          const iata = place?.iata_code || '';
+          const name = place?.name || '';
+          if (city && iata) return `${city} (${iata})`;
+          if (city) return city;
+          if (iata) return iata;
+          if (name) return name;
+          return '';
+        };
+
+        const label = buildLabel(dest);
+        const originLabel = buildLabel(origin);
+
+        const result = {
+          label,
+          originLabel,
+          airlineName: airline?.name || '',
+          airlineIata: airline?.iata || '',
+        };
+
+        if (!result.label && !result.originLabel && !result.airlineName && !result.airlineIata) {
+          writeDestCache(cs, null);
+          return null;
+        }
+
+        writeDestCache(cs, result);
+        return result;
+      } catch (_) {
+        return null;
+      }
+    }
+
+    function pickNearestFromList(pos, list) {
+      let best = null;
+      let bestDist = Infinity;
+
+      for (const ac of list) {
+        const lat = ac.lat;
+        const lon = ac.lon;
+        if (typeof lat !== 'number' || typeof lon !== 'number') continue;
+
+        const altM = altBaroToMeters(ac.alt_baro);
+        if (altM == null || altM < MIN_ALT_M) continue;
+
+        const dist = haversineKm(pos.lat, pos.lon, lat, lon);
+        if (dist > RADIUS_KM) continue;
+
+        if (dist < bestDist) {
+          bestDist = dist;
+          best = { ac, distKm: dist, altM };
+        }
+      }
+
+      return best;
+    }
+
+    async function fetchNearestFlight(pos) {
+      // Screensaver injects pre-filtered nearest via native NSURLSession.
+      if (nativeFeedOnly) {
+        if (!hasNativePayload) return null;
+        return nativeNearest;
+      }
+
+      const url = API_POINT(pos.lat, pos.lon, RADIUS_NM);
+      const res = await fetch(url, { headers: { Accept: 'application/json' } });
+      if (!res.ok) throw new Error('api');
+
+      const data = await res.json();
+      const list = Array.isArray(data?.ac) ? data.ac : [];
+      return pickNearestFromList(pos, list);
+    }
+
+    /**
+     * macOS .saver bridge — payload from OverheadFlightsView.m
+     * { lat, lon, nearest: { flight, hex, lat, lon, alt_baro, alt_m, dist_km } | null }
+     */
+    function applyNativePayload(payload) {
+      if (!payload || typeof payload !== 'object') return;
+
+      nativeFeedOnly = true;
+      window.__OVERHEAD_NATIVE_FEED__ = true;
+      hasNativePayload = true;
+      document.documentElement.classList.add('overhead-native');
+
+      if (typeof payload.lat === 'number' && typeof payload.lon === 'number') {
+        userPos = { lat: payload.lat, lon: payload.lon };
+        savePos(userPos);
+      }
+
+      const n = payload.nearest;
+      if (n && typeof n === 'object' && typeof n.lat === 'number' && typeof n.lon === 'number') {
+        const altM =
+          typeof n.alt_m === 'number'
+            ? n.alt_m
+            : altBaroToMeters(n.alt_baro);
+        // Coerce flight/hex — native JSON may pass null.
+        const flight =
+          typeof n.flight === 'string' ? n.flight : n.flight != null ? String(n.flight) : '';
+        const hex = typeof n.hex === 'string' ? n.hex : n.hex != null ? String(n.hex) : '';
+        nativeNearest = {
+          ac: {
+            flight,
+            hex,
+            lat: n.lat,
+            lon: n.lon,
+            alt_baro: n.alt_baro,
+          },
+          distKm: typeof n.dist_km === 'number' ? n.dist_km : haversineKm(userPos.lat, userPos.lon, n.lat, n.lon),
+          altM: altM != null ? altM : MIN_ALT_M,
+        };
+      } else {
+        nativeNearest = null;
+      }
+
+      tick();
+    }
+
+    window.__overheadApplyNativePayload = applyNativePayload;
+
+    async function transitionToEmpty(token) {
+      currentFlightKey = null;
+      activeFlightToken = token;
+      resetTextEntrance();
+      el.card.classList.remove('visible', 'text-visible');
+      if (!nativeFeedOnly) {
+        await sleep(CARD_FADE_MS);
+        if (token !== sequenceToken) return;
+      }
+      clearCardContent();
+    }
+
+    async function transitionToFlight(view, token, needsFadeOut) {
+      activeFlightToken = token;
+
+      // Screensaver WebKit often freezes rAF (process occluded/suspended).
+      // Native feed must never wait on prologue animation or text stays opacity:0 forever.
+      const instantShow = nativeFeedOnly || reduceMotion;
+
+      if (needsFadeOut && !instantShow) {
+        resetTextEntrance();
+        el.card.classList.remove('visible');
+        await sleep(CARD_FADE_MS);
+        if (token !== sequenceToken) return;
+        clearCardContent();
+        await sleep(BLACK_GAP_MS);
+        if (token !== sequenceToken) return;
+      } else if (needsFadeOut && instantShow) {
+        clearCardContent();
+      }
+
+      currentFlightKey = view.key;
+      applyView(view);
+      resetTextEntrance();
+      el.card.classList.add('visible');
+
+      if (instantShow) {
+        el.card.classList.add('text-visible');
+        return;
+      }
+
+      await playPrologue(token);
+      if (token !== sequenceToken) return;
+      revealText();
+    }
+
+    function handleDestinationResult(expectedKey, token, baseView, destInfo) {
+      if (token !== activeFlightToken || expectedKey !== currentFlightKey || !destInfo) return;
+
+      const nextView = {
+        ...baseView,
+        monogram: getMonogram(baseView.callsign, destInfo.airlineIata || ''),
+        airline: destInfo.airlineName || baseView.airline,
+        destination: formatRoute(destInfo.originLabel, destInfo.label) || baseView.destination,
+      };
+
+      el.monogram.textContent = nextView.monogram || '';
+      updateFlightDetails(nextView);
+    }
+
+    function buildView(nearest, key, brg) {
+      return {
+        key,
+        callsign: key,
+        monogram: getMonogram(key, ''),
+        airline: airlineFromCallsign(key),
+        destination: '',
+        altM: nearest.altM,
+        bearing: bearingLabel(brg),
+      };
+    }
+
+    let tickBusy = false;
+    let tickQueued = false;
+
+    async function tick() {
+      // Coalesce concurrent native injects (host often fires 2–3 times per second).
+      if (tickBusy) {
+        tickQueued = true;
+        return;
+      }
+      tickBusy = true;
+      try {
+        do {
+          tickQueued = false;
+          await tickOnce();
+        } while (tickQueued);
+      } finally {
+        tickBusy = false;
+      }
+    }
+
+    async function tickOnce() {
+      try {
+        const nearest = await fetchNearestFlight(userPos);
+        if (!nearest) {
+          const token = ++sequenceToken;
+          await transitionToEmpty(token);
+          return;
+        }
+
+        const key = flightKeyFor(nearest.ac);
+        if (!key) {
+          const token = ++sequenceToken;
+          await transitionToEmpty(token);
+          return;
+        }
+
+        const brg = bearingDeg(userPos.lat, userPos.lon, nearest.ac.lat, nearest.ac.lon);
+        const view = buildView(nearest, key, brg);
+        const sameFlight = currentFlightKey === key;
+        const token = sameFlight ? activeFlightToken : ++sequenceToken;
+
+        // Destination lookup is best-effort; in .saver WebKit fetch may hang — don't block UI.
+        const destPromise = nativeFeedOnly
+          ? Promise.resolve(null).then(() => fetchDestination(key))
+          : fetchDestination(key);
+
+        if (sameFlight) {
+          updateFlightDetails(view);
+          // Ensure text is on-screen even if an earlier transition stalled mid-prologue.
+          el.card.classList.add('visible', 'text-visible');
+        } else {
+          await transitionToFlight(view, token, Boolean(currentFlightKey));
+        }
+
+        destPromise.then((destInfo) => {
+          handleDestinationResult(key, token, view, destInfo);
+        }).catch(() => {});
+      } catch (_) {
+      }
+    }
+
+    function startPolling() {
+      stopPolling();
+      // Native screensaver drives its own 90s poll + inject; still tick once for pending payload.
+      if (nativeFeedOnly) {
+        if (hasNativePayload) tick();
+        return;
+      }
+      tick();
+      pollTimer = window.setInterval(tick, POLL_MS);
+    }
+
+    function stopPolling() {
+      if (pollTimer != null) {
+        clearInterval(pollTimer);
+        pollTimer = null;
+      }
+    }
+
+    async function requestWakeLock() {
+      try {
+        if (!('wakeLock' in navigator)) return;
+        wakeLock = await navigator.wakeLock.request('screen');
+        wakeLock.addEventListener('release', () => {
+          wakeLock = null;
+        });
+      } catch (_) {}
+    }
+
+    async function releaseWakeLock() {
+      try {
+        if (wakeLock) {
+          await wakeLock.release();
+          wakeLock = null;
+        }
+      } catch (_) {}
+    }
+
+    function onVisibility() {
+      if (document.visibilityState === 'visible') {
+        requestWakeLock();
+        startPolling();
+        if (shaderBg) shaderBg.setActive(true);
+      } else {
+        stopPolling();
+        releaseWakeLock();
+        if (shaderBg) shaderBg.setActive(false);
+      }
+    }
+
+    /**
+     * Monochrome port of ShaderGradient "defaults" plane.
+     * Source params (chroma stripped → gray):
+     *   color1 #cfcfcf  color2 #8a8a8a  color3 #3a3a3a
+     *   uSpeed 0.4  uStrength 4  uDensity 1.3  uFrequency 5.5
+     *   uAmplitude 1  brightness 1.2  grain on  type plane
+     */
+    function createShaderBackground(canvas) {
+      const gl = canvas.getContext('webgl', {
+        alpha: false,
+        antialias: false,
+        depth: false,
+        stencil: false,
+        powerPreference: 'low-power',
+      });
+      if (!gl) return null;
+
+      const vertSrc = `
+        attribute vec2 a_pos;
+        varying vec2 v_uv;
+        void main() {
+          v_uv = a_pos * 0.5 + 0.5;
+          gl_Position = vec4(a_pos, 0.0, 1.0);
+        }
+      `;
+
+      // Interstella-like soft plane gradient (mono) + very light film grain
+      // Reference: shadergradient “Interstella” — soft falloff into black, grain is secondary
+      const fragSrc = `
+        precision mediump float;
+        varying vec2 v_uv;
+        uniform float u_time;
+        uniform vec2 u_res;
+        uniform float u_speed;
+        uniform float u_strength;
+        uniform float u_density;
+        uniform float u_freq;
+        uniform float u_amp;
+        uniform float u_bright;
+        uniform float u_grain;
+        uniform float u_animate;
+        uniform vec3 u_c1;
+        uniform vec3 u_c2;
+        uniform vec3 u_c3;
+
+        float hash(vec2 p) {
+          return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+        }
+        float noise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          float a = hash(i);
+          float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0));
+          float d = hash(i + vec2(1.0, 1.0));
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(a, b, u.x) + (c - a) * u.y * (1.0 - u.x) + (d - b) * u.x * u.y;
+        }
+        float fbm(vec2 p) {
+          float v = 0.0;
+          float a = 0.5;
+          for (int i = 0; i < 4; i++) {
+            v += a * noise(p);
+            p *= 2.05;
+            a *= 0.5;
+          }
+          return v;
+        }
+
+        void main() {
+          vec2 uv = v_uv;
+          vec2 p = uv - 0.5;
+          p.x *= u_res.x / max(u_res.y, 1.0);
+
+          // Soft plane framing (like Interstella: glow from one side → black)
+          float ang = 0.35;
+          float ca = cos(ang);
+          float sa = sin(ang);
+          vec2 q = mat2(ca, -sa, sa, ca) * p;
+          q += vec2(-0.35, 0.05);
+
+          float t = u_time * u_speed * u_animate;
+
+          // Slow, soft warp — gradient body, not speckles
+          vec2 nq = q * u_density * 1.15;
+          float n1 = fbm(nq * 0.9 + vec2(t * 0.12, -t * 0.08));
+          float n2 = fbm(nq * 0.65 + vec2(-t * 0.07, t * 0.1) + 2.7);
+          vec2 warp = vec2(n1, n2) * (u_strength * 0.045) * u_amp;
+          float field = fbm(nq * 0.75 + warp + vec2(t * 0.05, t * 0.04));
+
+          // Left-ish soft lobe into black (mono stand-in for warm glow)
+          float lobe = 1.0 - smoothstep(-0.15, 1.05, q.x + field * 0.45);
+          lobe *= smoothstep(1.1, 0.05, length(q * vec2(0.75, 1.05)));
+          float veil = smoothstep(0.15, 0.9, field) * 0.35;
+
+          float mask = clamp(lobe * 0.9 + veil * 0.25, 0.0, 1.0);
+          mask = pow(mask, 1.15);
+
+          // Dark mono ramp: black → charcoal → soft silver edge of the lobe
+          vec3 col = u_c3;
+          col = mix(col, u_c2, mask * 0.75);
+          col = mix(col, u_c1, pow(mask, 2.2) * 0.55);
+          col *= u_bright;
+
+          // Overall still black-led
+          col *= 0.72;
+          col = min(col, vec3(0.38));
+
+          // Film grain: fine & quiet (like the reference), not chunky noise
+          if (u_grain > 0.5) {
+            float g = hash(gl_FragCoord.xy + floor(u_time * 24.0 * u_animate));
+            // Only a few percent — texture on the gradient, not the subject
+            col += (g - 0.5) * 0.035 * (0.4 + mask * 0.6);
+          }
+
+          col = clamp(col, 0.0, 1.0);
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `;
+
+      function compile(type, src) {
+        const s = gl.createShader(type);
+        gl.shaderSource(s, src);
+        gl.compileShader(s);
+        if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) {
+          gl.deleteShader(s);
+          return null;
+        }
+        return s;
+      }
+
+      const vs = compile(gl.VERTEX_SHADER, vertSrc);
+      const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+      if (!vs || !fs) return null;
+
+      const prog = gl.createProgram();
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) return null;
+
+      const buf = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1,
+      ]), gl.STATIC_DRAW);
+
+      const aPos = gl.getAttribLocation(prog, 'a_pos');
+      const u = {
+        time: gl.getUniformLocation(prog, 'u_time'),
+        res: gl.getUniformLocation(prog, 'u_res'),
+        speed: gl.getUniformLocation(prog, 'u_speed'),
+        strength: gl.getUniformLocation(prog, 'u_strength'),
+        density: gl.getUniformLocation(prog, 'u_density'),
+        freq: gl.getUniformLocation(prog, 'u_freq'),
+        amp: gl.getUniformLocation(prog, 'u_amp'),
+        bright: gl.getUniformLocation(prog, 'u_bright'),
+        grain: gl.getUniformLocation(prog, 'u_grain'),
+        animate: gl.getUniformLocation(prog, 'u_animate'),
+        c1: gl.getUniformLocation(prog, 'u_c1'),
+        c2: gl.getUniformLocation(prog, 'u_c2'),
+        c3: gl.getUniformLocation(prog, 'u_c3'),
+      };
+
+      // Mono Interstella: soft silver glow → charcoal → pure black
+      const c1 = [0.48, 0.48, 0.48];
+      const c2 = [0.18, 0.18, 0.18];
+      const c3 = [0.0, 0.0, 0.0];
+
+      let raf = 0;
+      let active = true;
+      let animate = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      const t0 = performance.now();
+
+      function resize() {
+        const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+        const w = Math.max(1, Math.floor(window.innerWidth * dpr));
+        const h = Math.max(1, Math.floor(window.innerHeight * dpr));
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+        }
+        gl.viewport(0, 0, canvas.width, canvas.height);
+      }
+
+      function frame(now) {
+        raf = 0;
+        if (!active) return;
+        resize();
+        gl.useProgram(prog);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+        const t = animate ? (now - t0) * 0.001 : 0;
+        gl.uniform1f(u.time, t);
+        gl.uniform2f(u.res, canvas.width, canvas.height);
+        gl.uniform1f(u.speed, 0.28);
+        gl.uniform1f(u.strength, 3.6);
+        gl.uniform1f(u.density, 1.2);
+        gl.uniform1f(u.freq, 5.5);
+        gl.uniform1f(u.amp, 1.0);
+        gl.uniform1f(u.bright, 0.85);
+        gl.uniform1f(u.grain, 1.0);
+        gl.uniform1f(u.animate, animate ? 1.0 : 0.0);
+        gl.uniform3fv(u.c1, c1);
+        gl.uniform3fv(u.c2, c2);
+        gl.uniform3fv(u.c3, c3);
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        if (active && animate) {
+          raf = requestAnimationFrame(frame);
+        }
+      }
+
+      function kick() {
+        if (!active) return;
+        if (!raf) raf = requestAnimationFrame(frame);
+      }
+
+      window.addEventListener('resize', () => {
+        resize();
+        kick();
+      });
+
+      resize();
+      kick();
+      // Static frame when reduced motion
+      if (!animate) {
+        requestAnimationFrame(frame);
+      }
+
+      return {
+        setActive(v) {
+          active = Boolean(v);
+          if (active) kick();
+          else if (raf) {
+            cancelAnimationFrame(raf);
+            raf = 0;
+          }
+        },
+        setAnimate(v) {
+          animate = Boolean(v);
+          kick();
+          if (!animate) requestAnimationFrame(frame);
+        },
+      };
+    }
+
+    let shaderBg = null;
+
+    async function init() {
+      document.addEventListener('visibilitychange', onVisibility);
+      motionQuery.addEventListener('change', (event) => {
+        reduceMotion = event.matches;
+        if (reduceMotion) {
+          el.card.classList.add('text-visible');
+        }
+        if (shaderBg) shaderBg.setAnimate(!reduceMotion);
+      });
+
+      const canvas = document.getElementById('shader-bg');
+      if (canvas) {
+        shaderBg = createShaderBackground(canvas);
+      }
+
+      // 螢保晚到注入座標時可呼叫
+      window.__overheadApplyNativePos = () => {
+        const fixed = window.__OVERHEAD_FIXED_POS__;
+        if (
+          fixed &&
+          typeof fixed.lat === 'number' &&
+          typeof fixed.lon === 'number' &&
+          Number.isFinite(fixed.lat) &&
+          Number.isFinite(fixed.lon)
+        ) {
+          userPos = { lat: fixed.lat, lon: fixed.lon };
+          savePos(userPos);
+          if (!nativeFeedOnly) tick();
+        }
+      };
+
+      // Flush payload that arrived before JS finished loading
+      if (window.__OVERHEAD_PENDING_PAYLOAD__) {
+        applyNativePayload(window.__OVERHEAD_PENDING_PAYLOAD__);
+        window.__OVERHEAD_PENDING_PAYLOAD__ = null;
+      }
+      if (window.__OVERHEAD_NATIVE_FEED__) {
+        nativeFeedOnly = true;
+      }
+
+      await requestWakeLock();
+      await getPosition(() => {});
+      startPolling();
+    }
+
+    init();
+  })();
+  </script>
+</body>
+</html>

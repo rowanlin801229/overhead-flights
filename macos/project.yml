@@ -1,0 +1,36 @@
+name: OverheadFlights
+options:
+  bundleIdPrefix: com.portfolio
+  deploymentTarget:
+    macOS: "12.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MACOSX_DEPLOYMENT_TARGET: "12.0"
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_ALLOWED: "NO"
+    CODE_SIGNING_REQUIRED: "NO"
+targets:
+  OverheadFlights:
+    type: screensaver
+    platform: macOS
+    sources:
+      - path: OverheadFlightsView.swift
+      - path: Web
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_NAME: OverheadFlights
+        PRODUCT_BUNDLE_IDENTIFIER: com.portfolio.overheadflights
+        INFOPLIST_FILE: Info.plist
+        WRAPPER_EXTENSION: saver
+        INSTALL_PATH: "$(HOME)/Library/Screen Savers"
+        SKIP_INSTALL: "NO"
+        COMBINE_HIDPI_IMAGES: "YES"
+        GENERATE_INFOPLIST_FILE: "NO"
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: "YES"
+        LD_RUNPATH_SEARCH_PATHS: "@loader_path/../Frameworks @executable_path/../Frameworks"
+        OTHER_LDFLAGS: "-framework ScreenSaver -framework WebKit -framework CoreLocation"
+    dependencies: []

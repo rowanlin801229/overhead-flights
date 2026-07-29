@@ -1,0 +1,20 @@
+# Build artifacts
+macos/build/
+macos/Web/
+macos-app/build/
+macos-app/dist/
+**/DerivedData/
+*.xcuserstate
+xcuserdata/
+*.o
+*.d
+*.dia
+
+# OS / editor
+.DS_Store
+*.swp
+*~
+
+# Logs
+*.log
+/tmp/

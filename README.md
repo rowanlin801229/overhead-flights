@@ -9,8 +9,6 @@ A minimal **macOS screen saver** that quietly shows the nearest aircraft flying 
 
 [English](#english) · [繁體中文](#繁體中文)
 
-![Overhead Flights hero](./portfolio/assets/hero.jpg)
-
 ![Overhead Flights demo](./portfolio/assets/overhead-flights-demo.gif)
 
 🎬 Full demo video: [`portfolio/assets/overhead-flights-demo.mp4`](./portfolio/assets/overhead-flights-demo.mp4) (starts on an empty black screen, then fades in — that's by design)

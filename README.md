@@ -1,22 +1,29 @@
 # Overhead Flights（頭頂航班）
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](./LICENSE)
+![Platform: macOS](https://img.shields.io/badge/platform-macOS-black.svg)
+![No dependencies](https://img.shields.io/badge/dependencies-none-brightgreen.svg)
+
 極簡 **macOS 螢幕保護程式**：安靜顯示正飛過你頭頂的最近一班飛機。
 
-- 在範圍內持續顯示（約 90 秒更新高度）  
-- 無飛機時全黑  
+![Overhead Flights hero](./portfolio/assets/hero.jpg)
+
+🎬 Demo（無機全黑 → 淡入有機畫面）：[`portfolio/assets/overhead-flights-demo.mp4`](./portfolio/assets/overhead-flights-demo.mp4)
+
+- 在範圍內持續顯示（約 90 秒更新高度）
+- 無飛機時全黑
 - **啟動時間**請在系統設定裡自己設（例如 20 分鐘）— 本專案只替換螢保**內容**
 
-> 給 AI：請讀 [`SKILL.md`](./SKILL.md)，照 skill 安裝，不要裝閒置監視 Agent。  
-> 進度：[`PROGRESS.md`](./PROGRESS.md) · 規格：[`overhead-flights-spec.md`](./overhead-flights-spec.md)
+> 給 AI：請讀 [`SKILL.md`](./SKILL.md)，照 skill 安裝，不要裝閒置監視 Agent。
 
 ---
 
-## 給朋友／給 AI 的最短路徑
+## 🚀 Quick Start
 
 ### 1. 你需要
 
-- Mac + [Xcode](https://developer.apple.com/xcode/)  
-- 網路  
+- Mac + [Xcode](https://developer.apple.com/xcode/)
+- 網路
 
 ### 2. 安裝螢保
 
@@ -30,11 +37,11 @@ chmod +x build-and-install.sh
 
 ### 3. 在系統設定選它
 
-1. **系統設定 → 背景圖片 → 更改螢幕保護程式**  
-2. **使用螢幕保護程式 → 自訂**  
-3. 點 **OverheadFlights**（和 Fliqlo 同一區，可能要往下找）  
-4. **啟動螢幕保護程式…** 設成你要的時間（例如 20 分鐘）  
-5. 完成  
+1. **系統設定 → 背景圖片 → 更改螢幕保護程式**
+2. **使用螢幕保護程式 → 自訂**
+3. 點 **OverheadFlights**（和 Fliqlo 同一區，可能要往下找）
+4. **啟動螢幕保護程式…** 設成你要的時間（例如 20 分鐘）
+5. 完成
 
 若提示無法打開：
 
@@ -55,7 +62,7 @@ xattr -dr com.apple.quarantine ~/Library/Screen\ Savers/OverheadFlights.saver
 
 ---
 
-## 選用：全螢幕 App / 網頁
+## ✨ 選用：全螢幕 App / 網頁
 
 ```bash
 # App（手動開、動滑鼠結束）
@@ -68,7 +75,7 @@ python3 -m http.server 8765
 
 ---
 
-## 資料來源
+## 🌐 資料來源
 
 | 用途 | 來源 |
 |------|------|
@@ -79,21 +86,30 @@ python3 -m http.server 8765
 
 ---
 
-## 授權與限制
-
-- 個人作品集／非商業展示  
-- 未簽名建置：分享時朋友可能看到 Gatekeeper 提示  
-- 僅 macOS `.saver`（非 Windows）  
-- 新系統請用 **自訂** 列表選取，不是風景縮圖那一排  
-
----
-
-## 專案結構
+## 📖 專案結構
 
 | 路徑 | 說明 |
 |------|------|
 | `index.html` | 全部畫面與資料邏輯 |
 | `macos/` | Screen Saver 建置 |
 | `macos-app/` | 選用全螢幕 App |
+| `docs/overhead-flights-spec.md` | 產品規格書 |
 | `SKILL.md` | AI 執行說明 |
-| `PROGRESS.md` | 進度紀錄 |
+
+---
+
+## 📜 License
+
+程式碼採用 [MIT License](./LICENSE)。飛航資料由第三方 API（airplanes.live、adsbdb）提供，其條款以個人／非商業用途為前提，請勿改作商業服務。
+
+## ⚠️ 限制
+
+- 未簽名建置：分享時朋友可能看到 Gatekeeper 提示
+- 僅 macOS `.saver`（非 Windows）
+- 新系統請用 **自訂** 列表選取，不是風景縮圖那一排
+
+---
+
+## 🔗 Links
+
+- Repo: [github.com/rowanlin801229/overhead-flights](https://github.com/rowanlin801229/overhead-flights)

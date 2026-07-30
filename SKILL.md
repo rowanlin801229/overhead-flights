@@ -112,8 +112,7 @@ window.__overheadApplyNativePos?.();
 - `index.html` — all UI + data logic  
 - `macos/` — ScreenSaver target + `build-and-install.sh`  
 - `macos-app/` — optional App  
-- `overhead-flights-spec.md` — product spec  
-- `PROGRESS.md` — status log  
+- `docs/overhead-flights-spec.md` — product spec  
 
 ## Sharing with friends (what agent should prepare)
 

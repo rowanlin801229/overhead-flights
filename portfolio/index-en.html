@@ -1,0 +1,914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overhead Flights — Rowan Lin</title>
+  <meta name="description" content="Overhead Flights: real flight data, quietly displayed on a macOS screen saver — showing the one plane passing overhead right now.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400;1,600&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0e0d;
+      --fg: #8a8a86;
+      --accent: #B84545;
+      --muted: rgba(138,138,134,0.55);
+      --line: rgba(138,138,134,0.13);
+      --surface: #141413;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      font-weight: 300;
+      overflow-x: hidden;
+    }
+    .display { font-family: 'Cormorant Garamond', Georgia, serif; }
+    a { color: var(--fg); transition: color 0.3s; }
+    a:hover { color: var(--accent); }
+
+    /* HERO */
+    .cs-hero {
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--line);
+    }
+    .cs-hero-copy {
+      padding: 120px 5vw 3rem;
+    }
+    .cs-label {
+      font-size: 1rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      display: block;
+      opacity: 0;
+      transform: translateY(12px);
+      filter: blur(4px);
+      animation: fadeup 0.7s cubic-bezier(0.16,1,0.3,1) 0.2s forwards;
+    }
+    .cs-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: clamp(3.2rem, 9vw, 8.5rem);
+      line-height: 0.92;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+      color: #c8c8c2;
+      opacity: 0;
+      transform: translateY(60px);
+      filter: blur(4px);
+      animation: fadeup 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s forwards;
+    }
+    .cs-subtitle {
+      font-size: clamp(1rem, 1.4vw, 1.2rem);
+      line-height: 1.8;
+      color: var(--muted);
+      max-width: 58ch;
+      margin-bottom: 0;
+      opacity: 0;
+      transform: translateY(20px);
+      filter: blur(4px);
+      animation: fadeup 0.7s cubic-bezier(0.16,1,0.3,1) 0.45s forwards;
+    }
+    .cs-hero-banner {
+      width: 100%;
+      overflow: hidden;
+      background: #0a0a09;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      opacity: 0;
+      transform: translateY(24px);
+      filter: blur(4px);
+      animation: fadeup 0.9s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
+    }
+    .cs-hero-banner .cs-img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      max-height: min(72vh, 900px);
+      transition: transform 0.9s cubic-bezier(0.16,1,0.3,1);
+    }
+    .cs-hero-banner:hover .cs-img { transform: scale(1.02); }
+    .cs-meta {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2rem;
+      padding: 2.5rem 5vw 8vh;
+      opacity: 0;
+      transform: translateY(20px);
+      filter: blur(4px);
+      animation: fadeup 0.7s cubic-bezier(0.16,1,0.3,1) 0.7s forwards;
+    }
+    .cs-meta-label {
+      font-size: 0.85rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: block;
+      margin-bottom: 0.6rem;
+    }
+    .cs-meta-val { font-size: 1.05rem; line-height: 1.6; color: var(--fg); }
+    @keyframes fadeup { to { opacity: 1; transform: none; filter: blur(0); } }
+
+    /* MEDIA */
+    .cs-img-full { border-bottom: 1px solid var(--line); overflow: hidden; background: #0a0a09; }
+    .cs-img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      transition: transform 0.9s cubic-bezier(0.16,1,0.3,1);
+    }
+    .cs-img-full:hover .cs-img { transform: scale(1.02); }
+    .cs-video-wrap {
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+      background: #000;
+    }
+    .cs-video {
+      width: 100%;
+      display: block;
+      max-height: 85vh;
+      object-fit: contain;
+      background: #000;
+    }
+    .cs-media-caption {
+      padding: 1rem 5vw;
+      font-size: 0.85rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    /* SECTIONS */
+    .cs-section { padding: clamp(5rem, 9vh, 8rem) 5vw; border-bottom: 1px solid var(--line); }
+    .cs-sec-header {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6vw;
+      margin-bottom: 3.5rem;
+    }
+    .cs-sec-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 0.3rem;
+    }
+    .cs-sec-headline {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: #bdbdb6;
+    }
+    .cs-text-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6vw;
+    }
+    .cs-text-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 0.25rem;
+    }
+    .cs-text-body {
+      font-size: 1.125rem;
+      line-height: 1.95;
+      color: var(--muted);
+      max-width: 68ch;
+      text-wrap: pretty;
+    }
+    .cs-text-body + .cs-text-body { margin-top: 1.5rem; }
+    .cs-text-body strong { color: var(--fg); font-weight: 400; }
+    .cs-text-body p + p { margin-top: 1.25rem; }
+
+    /* INSIGHT */
+    .cs-insight {
+      background: var(--surface);
+      padding: 4rem 5vw;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6vw;
+      align-items: start;
+    }
+    .cs-insight-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 0.3rem;
+    }
+    .cs-insight-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: clamp(1.4rem, 2.5vw, 2rem);
+      font-weight: 300;
+      line-height: 1.5;
+      color: #c4c4bc;
+    }
+
+    /* TABLES */
+    .findings-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+    }
+    .findings-table th {
+      font-size: 0.85rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 400;
+      text-align: left;
+      padding: 1rem 1.25rem 1.2rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .findings-table td {
+      font-size: 1.05rem;
+      padding: 1.25rem 1.25rem 1.25rem 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      vertical-align: top;
+      line-height: 1.65;
+    }
+    .findings-table tr:last-child td { border-bottom: none; }
+    .findings-table .cue-name { color: var(--fg); font-weight: 400; }
+    .status-ok { color: var(--fg); }
+    .status-warn { color: var(--accent); }
+
+    /* PROCESS */
+    .cs-process-steps { display: flex; flex-direction: column; gap: 0; margin-top: 1rem; }
+    .cs-proc-step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+      padding: 1.6rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .cs-proc-step:last-child { border-bottom: none; }
+    .cs-proc-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: 1.5rem;
+      font-weight: 300;
+      color: rgba(184,69,69,0.72);
+    }
+    .cs-proc-desc { font-size: 1.1rem; line-height: 1.85; color: var(--muted); }
+    .cs-proc-desc strong { color: var(--fg); font-weight: 400; }
+
+    /* POSITIONING MAP */
+    .pos-map {
+      margin-top: 2.5rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: clamp(1.5rem, 4vw, 2.5rem);
+      max-width: 640px;
+    }
+    .pos-map-canvas {
+      position: relative;
+      aspect-ratio: 1.15 / 1;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .pos-axis-y {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--line);
+      transform: translateX(-50%);
+    }
+    .pos-axis-x {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--line);
+      transform: translateY(-50%);
+    }
+    .pos-label {
+      position: absolute;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .pos-label.top { top: 0; left: 50%; transform: translateX(-50%); }
+    .pos-label.bottom { bottom: 0; left: 50%; transform: translateX(-50%); }
+    .pos-label.left { left: 0; top: 50%; transform: translateY(-50%); writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
+    .pos-label.right { right: 0; top: 50%; transform: translateY(-50%); writing-mode: vertical-rl; }
+    .pos-dot {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .pos-dot span {
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-top: 0.35rem;
+    }
+    .pos-dot strong {
+      display: inline-block;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      color: var(--fg);
+      font-weight: 400;
+    }
+    .pos-dot.star strong { color: var(--accent); }
+    .pos-dot .mark {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--fg);
+      opacity: 0.45;
+      margin: 0 auto;
+    }
+    .pos-dot.star .mark {
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      opacity: 1;
+      box-shadow: 0 0 0 4px rgba(184,69,69,0.15);
+    }
+    /* Approximate quadrants: passive+experience = top-right of passive axis */
+    .pos-dot.of { left: 78%; top: 22%; }
+    .pos-dot.airframe { left: 72%; top: 32%; }
+    .pos-dot.fr { left: 22%; top: 72%; }
+    .pos-dot.fliqlo { left: 78%; top: 68%; }
+
+    /* PIPELINE */
+    .pipeline {
+      margin-top: 2rem;
+      font-family: 'Space Grotesk', monospace, sans-serif;
+      font-size: 0.95rem;
+      line-height: 1.9;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 1.5rem 1.75rem;
+      max-width: 52ch;
+      white-space: pre-wrap;
+    }
+    .pipeline strong { color: var(--fg); font-weight: 400; }
+
+    /* LISTS */
+    .gioia-bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      margin-top: 1.25rem;
+    }
+    .gioia-bullets li {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--muted);
+      padding-left: 1.2rem;
+      position: relative;
+    }
+    .gioia-bullets li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: rgba(184,69,69,0.5);
+    }
+    .gioia-bullets li strong { color: var(--fg); font-weight: 400; }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      filter: blur(4px);
+      transition: opacity 0.85s cubic-bezier(0.16,1,0.3,1), transform 0.85s cubic-bezier(0.16,1,0.3,1), filter 0.85s cubic-bezier(0.16,1,0.3,1);
+    }
+    .reveal.in { opacity: 1; transform: none; filter: blur(0); }
+
+    footer {
+      padding: 3rem 5vw;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1.5rem;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      color: rgba(138,138,134,0.4);
+    }
+    footer a { color: rgba(138,138,134,0.55); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+    .footer-meta { max-width: 70ch; line-height: 1.7; }
+
+    @media (max-width: 767px) {
+      .cs-hero-copy { padding: 96px 4vw 2rem; }
+      .cs-title { font-size: clamp(2.8rem, 14vw, 4.5rem); }
+      .cs-hero-banner .cs-img { max-height: 52vh; }
+      .cs-meta { grid-template-columns: 1fr 1fr; gap: 1.25rem; padding: 1.5rem 4vw 6vh; }
+      .cs-section { padding: 7vh 4vw; }
+      .cs-sec-header, .cs-text-grid, .cs-insight { grid-template-columns: 1fr; gap: 1.2rem; }
+      .cs-sec-header { margin-bottom: 2.2rem; }
+      .cs-text-body, .cs-proc-desc { font-size: 1.05rem; line-height: 1.75; }
+      .findings-table th, .findings-table td { font-size: 0.95rem; padding-right: 0.5rem; }
+      .pos-dot span { font-size: 0.65rem; max-width: 9ch; white-space: normal; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .reveal { opacity: 1; transform: none; filter: none; }
+    }
+
+    /* LANG SWITCH */
+    .lang-switch {
+      position: absolute;
+      top: 1.75rem;
+      right: 5vw;
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      z-index: 5;
+    }
+    .lang-switch a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .lang-switch a:hover,
+    .lang-switch a.is-active { color: var(--fg); }
+    .lang-switch .sep { margin: 0 0.45em; opacity: 0.35; }
+    .cs-hero { position: relative; }
+  </style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <header class="cs-hero">
+    <nav class="lang-switch" aria-label="Language">
+      <a href="index.html" onclick="localStorage.setItem('of-lang-choice','zh')">中文</a><span class="sep">·</span><a href="index-en.html" class="is-active" onclick="localStorage.setItem('of-lang-choice','en')">EN</a>
+    </nav>
+
+    <div class="cs-hero-copy">
+      <span class="cs-label">Case Study · Independent Project</span>
+      <h1 class="cs-title">Overhead Flights</h1>
+      <p class="cs-subtitle">Overhead Flights: real flight data, quietly displayed on a macOS screen saver — showing the one plane passing overhead right now.</p>
+    </div>
+    <figure class="cs-hero-banner">
+      <img class="cs-img" src="assets/mockup/export.jpg" alt="MacBook on a desk at night showing Overhead Flights screensaver with callsign BAW118; city skyline and distant aircraft through floor-to-ceiling windows." width="1920" height="1080">
+    </figure>
+    <div class="cs-meta">
+      <div>
+        <span class="cs-meta-label">Role</span>
+        <span class="cs-meta-val">UI/UX &amp; Product Designer</span>
+      </div>
+      <div>
+        <span class="cs-meta-label">Focus</span>
+        <span class="cs-meta-val">Research · AI workflow · Integration</span>
+      </div>
+      <div>
+        <span class="cs-meta-label">Platform</span>
+        <span class="cs-meta-val">macOS Screen Saver</span>
+      </div>
+      <div>
+        <span class="cs-meta-label">Year</span>
+        <span class="cs-meta-val">2026</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- DEMO VIDEO -->
+  <div class="cs-video-wrap reveal">
+    <video class="cs-video"
+      src="assets/overhead-flights-demo.mp4"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="metadata"
+      controls
+      aria-label="Overhead Flights demo: empty black sky, then fade in to live flight stack">
+    </video>
+  </div>
+  <p class="cs-media-caption">Demo — empty black sky, then fade in to a live flight</p>
+
+  <!-- S1 MARKET -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Situation</span>
+      <h2 class="cs-sec-headline">Mainstream apps all require you to actively open and search; the passive, single-device direction has already been done in hardware.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Market landscape</span>
+      <div class="cs-text-body">
+        <p>Most people spend the majority of their day glued to a phone or a laptop. This product starts from that observation: it connects a screen saver with real flight information, using the lowest possible amount of disruption to let someone feel a faint sense of connection to another person.</p>
+        <p>There's no shortage of plane-tracking tools — FlightRadar24, Plane Finder, FlightAware all lay the whole sky out as a map, a list, an alert feed. They require you to <strong>actively open</strong> the app to check; at their core, they're dashboards. The maker community has also built hardware for this: <strong>Airframe</strong> (a Raspberry Pi + e-paper display) quietly shows the nearest plane overhead — a gift its creator built for a friend who lived under a flight path. The idea itself is not something I thought of first.</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Example</th>
+              <th>Behavior</th>
+              <th>Limitation</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">Mainstream apps</td>
+              <td>FlightRadar24, etc.</td>
+              <td>Active search, multi-plane map</td>
+              <td>Requires opening, high information density</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Maker hardware</td>
+              <td>Airframe, etc.</td>
+              <td>Passive, single device</td>
+              <td>Requires buying parts, assembly, takes up physical space</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Ambient screen savers</td>
+              <td>Fliqlo, Aerial</td>
+              <td>Passive, atmospheric</td>
+              <td>No flight information, or unrelated to flight</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- S2 POSITIONING -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Positioning</span>
+      <h2 class="cs-sec-headline">The gap isn't the idea of "a plane overhead" — it's the intersection: a macOS screen saver.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Two axes</span>
+      <div class="cs-text-body">
+        <p>After checking, the actual gap isn't the concept of "a plane overhead" — it's the intersection: <strong>a macOS screen saver × real flight data × editorial typography</strong>. Mainstream apps' business models don't encourage a passive screen saver; Airframe proves the passive, single-device direction works, but it adds a physical device. There's no direct precedent for a software screen saver doing this — the argument has to address Airframe head-on, not pretend the market is empty.</p>
+        <div class="pos-map" aria-label="Positioning map: passive appearance × ambient experience">
+          <div class="pos-map-canvas">
+            <div class="pos-axis-x"></div>
+            <div class="pos-axis-y"></div>
+            <span class="pos-label top">Ambient experience</span>
+            <span class="pos-label bottom">Functional tool</span>
+            <span class="pos-label left">Active search</span>
+            <span class="pos-label right">Passive appearance</span>
+            <div class="pos-dot of star">
+              <div class="mark"></div>
+              <strong>★ Overhead Flights</strong>
+              <span>macOS screen saver</span>
+            </div>
+            <div class="pos-dot airframe">
+              <div class="mark"></div>
+              <strong>Airframe</strong>
+              <span>Hardware device</span>
+            </div>
+            <div class="pos-dot fr">
+              <div class="mark"></div>
+              <strong>FlightRadar, etc.</strong>
+              <span>Active tools</span>
+            </div>
+            <div class="pos-dot fliqlo">
+              <div class="mark"></div>
+              <strong>Fliqlo / Aerial</strong>
+              <span>Pure ambience</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="cs-insight reveal">
+    <span class="cs-insight-label">Data integrity</span>
+    <p class="cs-insight-text">A portfolio mockup can look beautiful, but if the claim is "a plane overhead," the data has to be live ADS-B — not a faked callsign animation. The data source's terms of use (non-commercial / educational / personal) also had to be checked before writing them into the README.</p>
+  </aside>
+
+  <!-- T -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Task</span>
+      <h2 class="cs-sec-headline">Take the real-time data that used to live only inside tracking apps, and move it into the screen saver that was already idle.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Goal</span>
+      <div class="cs-text-body">
+        <p>Move real-time data — the plane currently flying overhead, information that used to live only inside tracking apps — into the screen saver a computer is already running. No new app, no new device, no active searching: just replace what the screen saver shows, so a person can feel a faint human connection while being almost entirely undisturbed.</p>
+        <p style="margin-top:1.25rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.15rem;line-height:1.7;color:var(--muted)">“I decided to build a screensaver that quietly shows flight information, so people feel connected without any effort.”</p>
+        <p style="margin-top:1.75rem"><strong>Role</strong>: independently conceived and decided on direction, visuals, trade-offs, and risk. AI collaborated on research synthesis, drafting, and implementation — rules described below.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A0 AI -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · AI</span>
+      <h2 class="cs-sec-headline">Four tools, each with its own job — I'm the gatekeeper at every step.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Collaboration</span>
+      <div class="cs-text-body">
+        <p>This wasn't throwing one prompt at a tool and waiting for a result. Four tools, each with a distinct job, and I'm the gatekeeper at every step:</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>Tool</th>
+              <th>Responsibility</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">Claude</td>
+              <td>First-pass thinking: breaking down the problem, synthesizing market research, drafting the spec, early technical trade-offs</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Perplexity</td>
+              <td>Verifying claims: finding primary documents and research to check whether claims in the market research and design rationale actually hold up</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Grok</td>
+              <td>Only catches errors: doesn't redo the thinking; reviews facts, assumptions, risks</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Cursor</td>
+              <td>Only executes task packages that have already passed review; doesn't improvise before review</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:1.75rem">The reason for choosing Perplexity is straightforward: general-purpose AI answers can occasionally sound authoritative while having no real source behind them. Perplexity attaches sources to its answers, which lets me go back and verify instead of taking it at face value. That matters for a portfolio argument that will actually be scrutinized — claims about "where the gap is" in the market research, and the research cited in the design rationale, both need to trace back to real documents, not just "the AI said so."</p>
+        <p style="margin-top:2rem"><strong>Gatekeeping examples</strong> (this isn't a process demo — it's the judgment itself)</p>
+        <ol class="cs-process-steps" style="list-style:none;margin-top:0.5rem">
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">01</span>
+            <p class="cs-proc-desc"><strong>Perplexity's MCP tool kept returning 404 errors.</strong> I didn't wait for the tool to get fixed, and I didn't fill the gap with an AI's unverified memory — I opened a browser myself and manually verified the research instead. The judgment call: when a tool fails, there's a choice between "get something down now, verify later" and "just do it manually." I chose the latter, because this market research ultimately has to support the claim that "this gap is real" — it can't afford to rest on unverified information.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">02</span>
+            <p class="cs-proc-desc"><strong>A draft wanted to state adsbdb's rate limit as a specific number.</strong> That number had never been verified against a primary source — it was just a plausible-sounding guess from the AI. I required that "no number goes in without primary-source verification," and changed it to conservative, verifiable language instead (phrasing like "well below the public 1 req/s limit" — checkable, but not overstated). The judgment call: a portfolio gets scrutinized, and an unsourced number is worse for credibility than no number at all.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">03</span>
+            <p class="cs-proc-desc"><strong>The AI surfaced an unfavorable precedent: Airframe.</strong> The safer move would have been to avoid mentioning it and let readers assume the idea was original. I chose to address it directly instead: acknowledging that Airframe had already done the "nearest plane overhead" concept earlier, and narrowing the difference down to "form factor (screen saver vs. hardware) + execution (editorial typography vs. e-paper)." The judgment call: not finding a competitor doesn't mean you've won. Being willing to face the competitor you did find head-on is what actually demonstrates product judgment — not how thorough the market research was.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">04</span>
+            <p class="cs-proc-desc"><strong>Once the visual design was finalized, I marked it frozen in the documentation.</strong> I told the AI explicitly: "the text size and layout are already right — don't touch them unless I say so" — and confined its remaining freedom to the data layer and background effects. The judgment call: AI has no built-in sense of "good enough, stop here" — left alone, it tends to keep micro-adjusting past the point of visible difference. Freezing the design was a line I drew deliberately; it wasn't something the AI converged on by itself.</p>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <aside class="cs-insight reveal">
+    <span class="cs-insight-label">Principle</span>
+    <p class="cs-insight-text">AI accelerates drafts and implementation. Whether something passes is my decision.</p>
+  </aside>
+
+  <!-- A1 + A2 -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · Research &amp; Design</span>
+      <h2 class="cs-sec-headline">First verify whether the market gap is real, then decide which frameworks actually support "quiet."</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Research method</span>
+      <div class="cs-text-body">
+        <ol class="cs-process-steps" style="list-style:none">
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">01</span>
+            <p class="cs-proc-desc"><strong>Define the problem itself first, before rushing to research tools.</strong> Is the actual gap the feature of "tracking planes," or the experience of "being able to passively notice something without actively checking"? Get the problem definition wrong, and no amount of competitor research afterward will fix it.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">02</span>
+            <p class="cs-proc-desc"><strong>Scan mainstream apps' product logic and delivery format</strong> (FlightRadar24, Plane Finder, FlightAware), and confirm their core assumption is "the user will actively open the app to check." That assumption itself is the actual limitation in the market structure — not just a descriptive word chosen at random.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">03</span>
+            <p class="cs-proc-desc"><strong>Go further and check maker projects, articles, and GitHub</strong> (Airframe, FlightTracker, etc.), deliberately looking for precedents unfavorable to my own claim, to avoid convincing myself the market was empty. This step exists so the positioning statement in the Situation section can survive the most direct rebuttal: "hasn't someone already done this?"</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">04</span>
+            <p class="cs-proc-desc"><strong>Verify API terms against primary documentation</strong> (airplanes.live's rate limit, terms of use). Any number without a primary source doesn't go into a public-facing document — better to use conservative, verifiable language than a number that looks more precise but has no traceable source.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">05</span>
+            <p class="cs-proc-desc"><strong>Converge on a single positioning statement that can withstand challenge</strong>: acknowledge the precedent exists, and compress the actual difference down to two points — "the screen saver as the medium" + "editorial typography as the execution" — rather than vaguely claiming "nothing like this exists."</p>
+          </li>
+        </ol>
+      </div>
+    </div>
+    <div class="cs-text-grid" style="margin-top:4rem">
+      <span class="cs-text-label">Design</span>
+      <div class="cs-text-body">
+        <p>Three frameworks, one line each, then down to the actual numbers:</p>
+        <ul class="gioia-bullets">
+          <li><strong>Calm technology</strong> (Weiser &amp; Brown, 1995): Information stays at the periphery of attention, and only moves to the center when needed. The original paper's motivation was countering the anxiety caused by information overload — not just saving attention.</li>
+          <li><strong>Soft fascination</strong> (attention restoration, Kaplan &amp; Kaplan, 1989): Effortless, gentle stimulation (like watching clouds) lets attention rest after a long stretch of focus. That's the reason this product lives in the "idle / lock screen" moment — it's meant to serve a moment of rest, not add one more information source to process.</li>
+          <li><strong>Ambient intimacy / social snacking</strong> (Reichelt, 2007; Gardner, Pickett &amp; Knowles, 2005): Passive exposure to a symbol of another person's existence — even without any interaction — can lower feelings of isolation. A stranger's flight quietly appearing is a small signal that "someone else out there is moving through their life right now," almost like someone quietly checking in on you.</li>
+        </ul>
+        <p style="margin-top:1.75rem"><strong>How these three frameworks became actual visual decisions:</strong></p>
+        <ul class="gioia-bullets">
+          <li><strong>Arousal is driven by brightness and saturation, not hue</strong> (Valdez &amp; Mehrabian, 1994) — this is the basis for the near-black background (<code>rgb(0.02, 0.02, 0.025)</code>) plus low-saturation silver-white text. There's no need to lean on the cliché of "cool colors" to create a sense of calm — lowering brightness and saturation directly is enough.</li>
+          <li><strong>The text hierarchy decays by proportional opacity, not equal steps</strong>: callsign 0.82 → airline 0.48 → meta 0.34 → monogram 0.28. This proportional decay matches the eye's non-linear perception of brightness differences (Weber-Fechner) — in a low-contrast environment, proportional steps make each level of hierarchy feel evenly spaced, instead of forcing hierarchy through harsh contrast.</li>
+          <li><strong>No cards, no borders, no icons — just a minimal stack of text</strong> (aesthetic-usability effect, Kurosu &amp; Kashimura, 1995): people read visual restraint directly as "this thing won't bother me." For a product that appears during lock screen / idle moments, that's a hard requirement — the context of use itself demands "don't disturb."</li>
+          <li><strong>Motion only serves genuine information changes</strong>: a new flight fades in over ≤0.4 seconds; an update to the same flight has no animation at all; a slow, multi-minute 4–6px anti-burn-in drift; and it respects the system's "reduce motion" setting. In a low-arousal environment, any unnecessary motion reads as disruption — so it only moves when there's actually something new to show.</li>
+        </ul>
+        <p style="margin-top:1.25rem">Hard constraint of the screen saver: <strong>any mouse movement or key press exits it immediately</strong> — there's no intermediate state like "click to reveal more." So disclosure is reduced to two honest states:</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>State</th>
+              <th>Behavior</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">No plane</td>
+              <td>Near-total black</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Plane present</td>
+              <td>Shows callsign, airline, altitude, bearing. <strong>As long as it stays within range, it keeps displaying</strong> (updated roughly every 90 seconds); only leaving range or losing the flight returns it to black.</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:1.5rem">The interest comes from the rarity of the event itself (a real plane actually passing over), not from stacking interactions or animation to please. When data can't be fetched, it fails silently into black rather than showing an error — a quiet way to fail, and part of the same "don't disturb" principle.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A3 + A4 -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · Data &amp; Build</span>
+      <h2 class="cs-sec-headline">After three separate WebView failures, the whole architecture moved to native.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Data authenticity</span>
+      <div class="cs-text-body">
+        <ul class="gioia-bullets">
+          <li><strong>Source</strong>: airplanes.live (live position) + adsbdb (airline / route information).</li>
+          <li><strong>Radius 40 km, an altitude threshold, and a 90-second polling interval</strong> — these three numbers are the result of a trade-off: too small a radius means long stretches of black (which feels broken); too large a radius shows planes that clearly aren't "overhead," undermining the product's core claim. The 90-second polling interval sits well below airplanes.live's public 1 req/s limit, trading a generous safety margin for stability — not having to worry about being rate-limited — at the cost of the data not being second-by-second real-time. But this product wants "a quiet environmental fact," not a tracking dashboard; second-level real-time was never the goal.</li>
+          <li><strong>Without GPS, it falls back to a fixed location</strong> (Wembley Park, London), documented as something the user can change themselves — not a hardcoded, unchangeable assumption.</li>
+          <li><strong>Multiple real callsigns verified against the API</strong> — this is the bottom line of the entire "plane overhead" claim: if the flight data were fake, the whole point of the project would break. What this product is meant to make someone feel is "a real stranger is genuinely flying overhead right now" — that connection has to be real, or it's just decoration. A portfolio mockup can look beautiful, but faking the data would make the claim itself collapse.</li>
+          <li><strong>Classification</strong>: non-commercial, portfolio use only; any rate-limit number without primary-source verification is stated conservatively rather than as a hard figure.</li>
+        </ul>
+        <p style="margin-top:1.5rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.15rem;line-height:1.7;color:var(--muted)">“If the flight data were fake, the whole point of the project would break — the connection has to be real, or it's just decoration.”</p>
+      </div>
+    </div>
+    <div class="cs-text-grid" style="margin-top:3.5rem">
+      <span class="cs-text-label">Technical integration</span>
+      <div class="cs-text-body">
+        <div class="pipeline"><strong>Location</strong> (or fallback)
+  → <strong>airplanes.live</strong> (nearest plane, 90s polling)
+  → (optional) <strong>adsbdb</strong> airline/route
+  → <strong>macOS .saver</strong>
+       URLSession for data · AppKit for text · Core Image for background
+  → System Settings → Customize screen saver</div>
+        <p style="margin-top:1.75rem">The original approach handled everything through WebView (rendering, text, data requests), and it hit repeated failures inside the <code>legacyScreenSaver</code> environment, forcing the whole architecture to change direction:</p>
+        <ol class="cs-process-steps" style="list-style:none;margin-top:0.5rem">
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">01</span>
+            <p class="cs-proc-desc"><strong>WebView's <code>fetch</code> was unreliable</strong> — the exact same code worked fine in a regular browser, but would silently fail inside the screen saver environment, with no clear error to catch. Fix: move all data requests to native <code>NSURLSession</code>.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">02</span>
+            <p class="cs-proc-desc"><strong>WebView's text animation would freeze</strong> — <code>requestAnimationFrame</code> and opacity transitions would lock up in this environment, causing the text fade-in to simply fail. Fix: render text with native AppKit <code>NSTextField</code>, and let AppKit's own animation handle the motion.</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">03</span>
+            <p class="cs-proc-desc"><strong>WebView's background frequently failed to render at all</strong> — the whole screen would occasionally show up blank, with the background layer not painting. Fix: render the background with native Core Image (Etheral Shadow style: grayscale mask + distortion + noise).</p>
+          </li>
+        </ol>
+        <p style="margin-top:1.5rem">The conclusion from all three failures was a dual-layer native approach: AppKit for text, Core Image for the background, URLSession for data — WebView dropped out of the main path entirely. The cost of this decision was losing the flexibility of iterating quickly with web technology; what it bought instead was genuine stability inside the screen saver environment. It only replaces the screen saver's content — it doesn't change the wait time a user sets in System Settings.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A5 -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · Ship</span>
+      <h2 class="cs-sec-headline">The project has to be something a friend can actually install — not something that only runs on my own Mac.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Delivery</span>
+      <div class="cs-text-body">
+        <ul class="gioia-bullets">
+          <li><strong>GitHub public</strong>: <a href="https://github.com/rowanlin801229/overhead-flights" target="_blank" rel="noopener">rowanlin801229/overhead-flights</a> — chosen to be public rather than shared privately, because the portfolio's claim is "this data is real," and making the source public lets that claim actually be checked, rather than just asserted.</li>
+          <li><strong><code>macos/build-and-install.sh</code></strong>: a one-command build-and-install script, designed for "a friend who has Xcode but doesn't know this project's internals" — not an internal tool only I can understand.</li>
+          <li><strong>Three-step README + Gatekeeper handling</strong>: since the project isn't signed by a developer account, macOS blocks unsigned software by default, so the README has to spell out exactly how to get past the Gatekeeper warning — it can't assume the user already knows how to handle it.</li>
+          <li><strong>Portfolio assets</strong>: the main mockup image, <code>overhead-flights-demo.mp4</code> (empty black sky fading into a live flight), and a static hero image — the "black to appearing" transition was specifically preserved in the deliverable, because that's the actual core moment of the whole product experience.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- R -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Result</span>
+      <h2 class="cs-sec-headline">A quiet ambient display, not a dashboard.</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">Outcome</span>
+      <div class="cs-text-body">
+        <p>A quiet ambient display: it doesn't compete for attention by interrupting. When a plane is present, it gives a restrained cue; when it isn't, it's just black. It turns "there's a plane overhead" into an environmental fact that can be noticed, never forced on anyone.</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>Goal</th>
+              <th>Result</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">Product installs</td>
+              <td class="status-ok">✅ <code>.saver</code> installs; selectable in System Settings' "Customize"</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Shows real flights, not simulated</td>
+              <td class="status-ok">✅ Multiple real callsigns, verifiable against airplanes.live</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Polling respects the spirit of the public terms</td>
+              <td class="status-ok">✅ 90-second polling, below the official 1 req/s limit</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Visuals read as editorial typography, not a tracking tool</td>
+              <td class="status-ok">✅ Near-black background + AppKit text; no map, no list, no terminal green</td>
+            </tr>
+            <tr>
+              <td class="cue-name">A third person can install it from the docs</td>
+              <td class="status-warn">⚠️ README and script are ready; no friend test-install feedback yet</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Positioning holds up to challenge</td>
+              <td class="status-ok">✅ Airframe addressed directly; the difference distilled to medium + aesthetic execution</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:2rem"><strong>Limitations</strong>: Unsigned, so it triggers Gatekeeper; falls back to a fixed location without GPS; macOS only; adsbdb's exact rate limit has no primary-source number, so the wording stays conservative.</p>
+        <p style="margin-top:1.5rem"><strong>What I learned</strong></p>
+        <ul class="gioia-bullets">
+          <li>An unfamiliar runtime environment (<code>legacyScreenSaver</code>) can't be assumed to behave like a normal web stack — technical validation should happen earlier.</li>
+          <li>Not finding a direct competitor doesn't mean you've won. Finding Airframe and still being willing to address it head-on, with an argument that holds up — that's what product judgment actually looks like.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- META -->
+  <footer>
+    <div class="footer-meta">
+      <strong style="color:var(--fg);font-weight:400">Role</strong> · UI/UX &amp; Product Designer — independently drove direction, market research, and visual/technical trade-offs<br>
+      <strong style="color:var(--fg);font-weight:400">AI tools</strong> · Claude (ideation / research synthesis / drafting) · Perplexity (verifying primary sources and research) · Grok (review / challenging assumptions) · Cursor (executing approved task packages); switched to manual/web verification when research tools were blocked<br>
+      <strong style="color:var(--fg);font-weight:400">Data sources</strong> · <a href="https://airplanes.live" target="_blank" rel="noopener">airplanes.live</a> · <a href="https://adsbdb.com" target="_blank" rel="noopener">adsbdb</a> (credit: PlaneBase / David J Taylor, Edinburgh)
+    </div>
+    <div>
+      <a href="https://github.com/rowanlin801229/overhead-flights" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var nodes = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window)) {
+        nodes.forEach(function (n) { n.classList.add('in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add('in');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -5% 0px' });
+      nodes.forEach(function (n) { io.observe(n); });
+    })();
+  </script>
+</body>
+</html>

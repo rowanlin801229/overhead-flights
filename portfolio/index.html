@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <script>
+  (function () {
+    var LANG_KEY = 'of-lang-choice';
+    var saved = localStorage.getItem(LANG_KEY);
+    if (saved) return;
+    var lang = (navigator.language || '').toLowerCase();
+    if (lang.indexOf('en') === 0) {
+      window.location.replace('index-en.html');
+    }
+  })();
+  </script>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Overhead Flights — Rowan Lin</title>
+  <meta name="description" content="頭頂航班：把真實飛航資料放進 macOS 螢幕保護程式——安靜顯示正飛過你頭頂的最近一班。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="anonymous">
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400;1,600&family=Space+Grotesk:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0e0e0d;
+      --fg: #8a8a86;
+      --accent: #B84545;
+      --muted: rgba(138,138,134,0.55);
+      --line: rgba(138,138,134,0.13);
+      --surface: #141413;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { scroll-behavior: smooth; }
+    body {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Space Grotesk', system-ui, sans-serif;
+      font-weight: 300;
+      overflow-x: hidden;
+    }
+    .display { font-family: 'Cormorant Garamond', Georgia, serif; }
+    a { color: var(--fg); transition: color 0.3s; }
+    a:hover { color: var(--accent); }
+
+    /* HERO */
+    .cs-hero {
+      display: flex;
+      flex-direction: column;
+      border-bottom: 1px solid var(--line);
+    }
+    .cs-hero-copy {
+      padding: 120px 5vw 3rem;
+    }
+    .cs-label {
+      font-size: 1rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 2rem;
+      display: block;
+      opacity: 0;
+      transform: translateY(12px);
+      filter: blur(4px);
+      animation: fadeup 0.7s cubic-bezier(0.16,1,0.3,1) 0.2s forwards;
+    }
+    .cs-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: clamp(3.2rem, 9vw, 8.5rem);
+      line-height: 0.92;
+      letter-spacing: -0.03em;
+      margin-bottom: 1.5rem;
+      color: #c8c8c2;
+      opacity: 0;
+      transform: translateY(60px);
+      filter: blur(4px);
+      animation: fadeup 0.9s cubic-bezier(0.16,1,0.3,1) 0.3s forwards;
+    }
+    .cs-subtitle {
+      font-size: clamp(1rem, 1.4vw, 1.2rem);
+      line-height: 1.8;
+      color: var(--muted);
+      max-width: 58ch;
+      margin-bottom: 0;
+      opacity: 0;
+      transform: translateY(20px);
+      filter: blur(4px);
+      animation: fadeup 0.7s cubic-bezier(0.16,1,0.3,1) 0.45s forwards;
+    }
+    .cs-hero-banner {
+      width: 100%;
+      overflow: hidden;
+      background: #0a0a09;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      opacity: 0;
+      transform: translateY(24px);
+      filter: blur(4px);
+      animation: fadeup 0.9s cubic-bezier(0.16,1,0.3,1) 0.55s forwards;
+    }
+    .cs-hero-banner .cs-img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      max-height: min(72vh, 900px);
+      transition: transform 0.9s cubic-bezier(0.16,1,0.3,1);
+    }
+    .cs-hero-banner:hover .cs-img { transform: scale(1.02); }
+    .cs-meta {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 2rem;
+      padding: 2.5rem 5vw 8vh;
+      opacity: 0;
+      transform: translateY(20px);
+      filter: blur(4px);
+      animation: fadeup 0.7s cubic-bezier(0.16,1,0.3,1) 0.7s forwards;
+    }
+    .cs-meta-label {
+      font-size: 0.85rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--accent);
+      display: block;
+      margin-bottom: 0.6rem;
+    }
+    .cs-meta-val { font-size: 1.05rem; line-height: 1.6; color: var(--fg); }
+    @keyframes fadeup { to { opacity: 1; transform: none; filter: blur(0); } }
+
+    /* MEDIA */
+    .cs-img-full { border-bottom: 1px solid var(--line); overflow: hidden; background: #0a0a09; }
+    .cs-img {
+      width: 100%;
+      display: block;
+      object-fit: cover;
+      transition: transform 0.9s cubic-bezier(0.16,1,0.3,1);
+    }
+    .cs-img-full:hover .cs-img { transform: scale(1.02); }
+    .cs-video-wrap {
+      border-bottom: 1px solid var(--line);
+      overflow: hidden;
+      background: #000;
+    }
+    .cs-video {
+      width: 100%;
+      display: block;
+      max-height: 85vh;
+      object-fit: contain;
+      background: #000;
+    }
+    .cs-media-caption {
+      padding: 1rem 5vw;
+      font-size: 0.85rem;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+
+    /* SECTIONS */
+    .cs-section { padding: clamp(5rem, 9vh, 8rem) 5vw; border-bottom: 1px solid var(--line); }
+    .cs-sec-header {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6vw;
+      margin-bottom: 3.5rem;
+    }
+    .cs-sec-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.35em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 0.3rem;
+    }
+    .cs-sec-headline {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-weight: 300;
+      font-size: clamp(2rem, 4vw, 3.2rem);
+      line-height: 1.2;
+      letter-spacing: -0.02em;
+      color: #bdbdb6;
+    }
+    .cs-text-grid {
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6vw;
+    }
+    .cs-text-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.28em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 0.25rem;
+    }
+    .cs-text-body {
+      font-size: 1.125rem;
+      line-height: 1.95;
+      color: var(--muted);
+      max-width: 68ch;
+      text-wrap: pretty;
+    }
+    .cs-text-body + .cs-text-body { margin-top: 1.5rem; }
+    .cs-text-body strong { color: var(--fg); font-weight: 400; }
+    .cs-text-body p + p { margin-top: 1.25rem; }
+
+    /* INSIGHT */
+    .cs-insight {
+      background: var(--surface);
+      padding: 4rem 5vw;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 220px 1fr;
+      gap: 6vw;
+      align-items: start;
+    }
+    .cs-insight-label {
+      font-size: 0.9rem;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--accent);
+      padding-top: 0.3rem;
+    }
+    .cs-insight-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: clamp(1.4rem, 2.5vw, 2rem);
+      font-weight: 300;
+      line-height: 1.5;
+      color: #c4c4bc;
+    }
+
+    /* TABLES */
+    .findings-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 2rem;
+    }
+    .findings-table th {
+      font-size: 0.85rem;
+      letter-spacing: 0.25em;
+      text-transform: uppercase;
+      color: var(--accent);
+      font-weight: 400;
+      text-align: left;
+      padding: 1rem 1.25rem 1.2rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .findings-table td {
+      font-size: 1.05rem;
+      padding: 1.25rem 1.25rem 1.25rem 0;
+      border-bottom: 1px solid var(--line);
+      color: var(--muted);
+      vertical-align: top;
+      line-height: 1.65;
+    }
+    .findings-table tr:last-child td { border-bottom: none; }
+    .findings-table .cue-name { color: var(--fg); font-weight: 400; }
+    .status-ok { color: var(--fg); }
+    .status-warn { color: var(--accent); }
+
+    /* PROCESS */
+    .cs-process-steps { display: flex; flex-direction: column; gap: 0; margin-top: 1rem; }
+    .cs-proc-step {
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      gap: 1.5rem;
+      align-items: start;
+      padding: 1.6rem 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .cs-proc-step:last-child { border-bottom: none; }
+    .cs-proc-num {
+      font-family: 'Cormorant Garamond', serif;
+      font-style: italic;
+      font-size: 1.5rem;
+      font-weight: 300;
+      color: rgba(184,69,69,0.72);
+    }
+    .cs-proc-desc { font-size: 1.1rem; line-height: 1.85; color: var(--muted); }
+    .cs-proc-desc strong { color: var(--fg); font-weight: 400; }
+
+    /* POSITIONING MAP */
+    .pos-map {
+      margin-top: 2.5rem;
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: clamp(1.5rem, 4vw, 2.5rem);
+      max-width: 640px;
+    }
+    .pos-map-canvas {
+      position: relative;
+      aspect-ratio: 1.15 / 1;
+      max-width: 520px;
+      margin: 0 auto;
+    }
+    .pos-axis-y {
+      position: absolute;
+      left: 50%;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--line);
+      transform: translateX(-50%);
+    }
+    .pos-axis-x {
+      position: absolute;
+      top: 50%;
+      left: 0;
+      right: 0;
+      height: 1px;
+      background: var(--line);
+      transform: translateY(-50%);
+    }
+    .pos-label {
+      position: absolute;
+      font-size: 0.7rem;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .pos-label.top { top: 0; left: 50%; transform: translateX(-50%); }
+    .pos-label.bottom { bottom: 0; left: 50%; transform: translateX(-50%); }
+    .pos-label.left { left: 0; top: 50%; transform: translateY(-50%); writing-mode: vertical-rl; transform: translateY(-50%) rotate(180deg); }
+    .pos-label.right { right: 0; top: 50%; transform: translateY(-50%); writing-mode: vertical-rl; }
+    .pos-dot {
+      position: absolute;
+      transform: translate(-50%, -50%);
+      text-align: center;
+      white-space: nowrap;
+    }
+    .pos-dot span {
+      display: block;
+      font-size: 0.75rem;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-top: 0.35rem;
+    }
+    .pos-dot strong {
+      display: inline-block;
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      color: var(--fg);
+      font-weight: 400;
+    }
+    .pos-dot.star strong { color: var(--accent); }
+    .pos-dot .mark {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--fg);
+      opacity: 0.45;
+      margin: 0 auto;
+    }
+    .pos-dot.star .mark {
+      width: 10px;
+      height: 10px;
+      background: var(--accent);
+      opacity: 1;
+      box-shadow: 0 0 0 4px rgba(184,69,69,0.15);
+    }
+    /* Approximate quadrants: passive+experience = top-right of passive axis */
+    .pos-dot.of { left: 78%; top: 22%; }
+    .pos-dot.airframe { left: 72%; top: 32%; }
+    .pos-dot.fr { left: 22%; top: 72%; }
+    .pos-dot.fliqlo { left: 78%; top: 68%; }
+
+    /* PIPELINE */
+    .pipeline {
+      margin-top: 2rem;
+      font-family: 'Space Grotesk', monospace, sans-serif;
+      font-size: 0.95rem;
+      line-height: 1.9;
+      color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--line);
+      padding: 1.5rem 1.75rem;
+      max-width: 52ch;
+      white-space: pre-wrap;
+    }
+    .pipeline strong { color: var(--fg); font-weight: 400; }
+
+    /* LISTS */
+    .gioia-bullets {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+      margin-top: 1.25rem;
+    }
+    .gioia-bullets li {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--muted);
+      padding-left: 1.2rem;
+      position: relative;
+    }
+    .gioia-bullets li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: rgba(184,69,69,0.5);
+    }
+    .gioia-bullets li strong { color: var(--fg); font-weight: 400; }
+
+    .reveal {
+      opacity: 0;
+      transform: translateY(24px);
+      filter: blur(4px);
+      transition: opacity 0.85s cubic-bezier(0.16,1,0.3,1), transform 0.85s cubic-bezier(0.16,1,0.3,1), filter 0.85s cubic-bezier(0.16,1,0.3,1);
+    }
+    .reveal.in { opacity: 1; transform: none; filter: blur(0); }
+
+    footer {
+      padding: 3rem 5vw;
+      border-top: 1px solid var(--line);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 1.5rem;
+      font-size: 0.9rem;
+      letter-spacing: 0.08em;
+      color: rgba(138,138,134,0.4);
+    }
+    footer a { color: rgba(138,138,134,0.55); text-decoration: none; }
+    footer a:hover { color: var(--accent); }
+    .footer-meta { max-width: 70ch; line-height: 1.7; }
+
+    @media (max-width: 767px) {
+      .cs-hero-copy { padding: 96px 4vw 2rem; }
+      .cs-title { font-size: clamp(2.8rem, 14vw, 4.5rem); }
+      .cs-hero-banner .cs-img { max-height: 52vh; }
+      .cs-meta { grid-template-columns: 1fr 1fr; gap: 1.25rem; padding: 1.5rem 4vw 6vh; }
+      .cs-section { padding: 7vh 4vw; }
+      .cs-sec-header, .cs-text-grid, .cs-insight { grid-template-columns: 1fr; gap: 1.2rem; }
+      .cs-sec-header { margin-bottom: 2.2rem; }
+      .cs-text-body, .cs-proc-desc { font-size: 1.05rem; line-height: 1.75; }
+      .findings-table th, .findings-table td { font-size: 0.95rem; padding-right: 0.5rem; }
+      .pos-dot span { font-size: 0.65rem; max-width: 9ch; white-space: normal; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+      }
+      .reveal { opacity: 1; transform: none; filter: none; }
+    }
+
+    /* LANG SWITCH */
+    .lang-switch {
+      position: absolute;
+      top: 1.75rem;
+      right: 5vw;
+      font-size: 0.8rem;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      z-index: 5;
+    }
+    .lang-switch a {
+      color: var(--muted);
+      text-decoration: none;
+      transition: color 0.3s;
+    }
+    .lang-switch a:hover,
+    .lang-switch a.is-active { color: var(--fg); }
+    .lang-switch .sep { margin: 0 0.45em; opacity: 0.35; }
+    .cs-hero { position: relative; }
+  </style>
+</head>
+<body>
+
+  <!-- HERO -->
+  <header class="cs-hero">
+    <nav class="lang-switch" aria-label="Language">
+      <a href="index.html" class="is-active" onclick="localStorage.setItem('of-lang-choice','zh')">中文</a><span class="sep">·</span><a href="index-en.html" onclick="localStorage.setItem('of-lang-choice','en')">EN</a>
+    </nav>
+
+    <div class="cs-hero-copy">
+      <span class="cs-label">Case Study · Independent Project</span>
+      <h1 class="cs-title">Overhead Flights</h1>
+      <p class="cs-subtitle">頭頂航班：把真實飛航資料放進 macOS 螢幕保護程式——安靜顯示正飛過你頭頂的最近一班。</p>
+    </div>
+    <figure class="cs-hero-banner">
+      <img class="cs-img" src="assets/mockup/export.jpg" alt="MacBook on a desk at night showing Overhead Flights screensaver with callsign BAW118; city skyline and distant aircraft through floor-to-ceiling windows." width="1920" height="1080">
+    </figure>
+    <div class="cs-meta">
+      <div>
+        <span class="cs-meta-label">Role</span>
+        <span class="cs-meta-val">UI/UX &amp; Product Designer</span>
+      </div>
+      <div>
+        <span class="cs-meta-label">Focus</span>
+        <span class="cs-meta-val">Research · AI workflow · Integration</span>
+      </div>
+      <div>
+        <span class="cs-meta-label">Platform</span>
+        <span class="cs-meta-val">macOS Screen Saver</span>
+      </div>
+      <div>
+        <span class="cs-meta-label">Year</span>
+        <span class="cs-meta-val">2026</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- DEMO VIDEO -->
+  <div class="cs-video-wrap reveal">
+    <video class="cs-video"
+      src="assets/overhead-flights-demo.mp4"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="metadata"
+      controls
+      aria-label="Overhead Flights demo: empty black sky, then fade in to live flight stack">
+    </video>
+  </div>
+  <p class="cs-media-caption">Demo — 無機全黑 → 淡入有機畫面</p>
+
+  <!-- S1 MARKET -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Situation</span>
+      <h2 class="cs-sec-headline">主流 App 都要你主動打開來查；被動單機的方向，硬體圈已經有人做過。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">市場結構</span>
+      <div class="cs-text-body">
+        <p>現代人一天多數時間黏在手機或電腦前，這款產品是基於這樣的現象，利用螢幕保護程式與航班資訊連結，用最低打擾的方式，讓使用者感受到細微的人與人連結。</p>
+        <p>市面上不缺追蹤飛機的工具——FlightRadar24、Plane Finder、FlightAware 把整片天空攤成地圖、清單、警示，要你<strong>主動打開</strong>來查，核心是儀表板。Maker 社群也有人做過硬體：<strong>Airframe</strong>（樹莓派 + 電子紙）安靜顯示頭頂最近一架，是作者送給住在航道下朋友的禮物。這個念頭本身不是我先想到的。</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>類型</th>
+              <th>代表</th>
+              <th>行為</th>
+              <th>限制</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">主流 App</td>
+              <td>FlightRadar24 等</td>
+              <td>主動查詢、多機地圖</td>
+              <td>要打開、資訊密度高</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Maker 硬體</td>
+              <td>Airframe 等</td>
+              <td>被動、單機</td>
+              <td>要買零件、組裝、佔實體空間</td>
+            </tr>
+            <tr>
+              <td class="cue-name">環景螢保</td>
+              <td>Fliqlo、Aerial</td>
+              <td>被動、氛圍</td>
+              <td>零飛航資訊，或與飛航無關</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- S2 POSITIONING -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Positioning</span>
+      <h2 class="cs-sec-headline">空缺不在「頭頂航班」這個念頭，在 macOS 螢保這個交集。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">兩軸</span>
+      <div class="cs-text-body">
+        <p>查證後的空缺不在「頭頂航班」這個概念，而在交集：<strong>macOS 螢幕保護程式 × 真實飛航資料 × 編輯排版</strong>。主流 App 商業模式不鼓勵被動螢保；Airframe 證明被動單機方向成立，但是新增實體裝置。軟體螢保沒有直接對應案例——論述必須正面處理 Airframe，不能假裝市場空白。</p>
+        <div class="pos-map" aria-label="定位圖：被動出現 × 情境體驗">
+          <div class="pos-map-canvas">
+            <div class="pos-axis-x"></div>
+            <div class="pos-axis-y"></div>
+            <span class="pos-label top">情境體驗</span>
+            <span class="pos-label bottom">功能工具</span>
+            <span class="pos-label left">主動查詢</span>
+            <span class="pos-label right">被動出現</span>
+            <div class="pos-dot of star">
+              <div class="mark"></div>
+              <strong>★ Overhead Flights</strong>
+              <span>macOS 螢保</span>
+            </div>
+            <div class="pos-dot airframe">
+              <div class="mark"></div>
+              <strong>Airframe</strong>
+              <span>硬體裝置</span>
+            </div>
+            <div class="pos-dot fr">
+              <div class="mark"></div>
+              <strong>FlightRadar 等</strong>
+              <span>主動工具</span>
+            </div>
+            <div class="pos-dot fliqlo">
+              <div class="mark"></div>
+              <strong>Fliqlo / Aerial</strong>
+              <span>純氛圍</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="cs-insight reveal">
+    <span class="cs-insight-label">Data integrity</span>
+    <p class="cs-insight-text">作品集 mockup 可以很美，但主張若是「頭頂航班」，就必須是 live ADS-B，不能是假 callsign 動畫。資料源用途（非商業／教育／個人）也要查過再寫進 README。</p>
+  </aside>
+
+  <!-- T -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Task</span>
+      <h2 class="cs-sec-headline">把追蹤 App 才有的即時資料，搬進本來就在發呆的螢保。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">目標</span>
+      <div class="cs-text-body">
+        <p>把「頭頂正在飛過的那一架」這種原本只在追蹤 App 裡的即時資料，搬進電腦本來就在跑的螢幕保護程式——不開新 App、不加新裝置、不用主動查詢，只換螢保內容，讓使用者在幾乎不被打擾的狀態下，也能感受到細微的人與人連結。</p>
+        <p style="margin-top:1.25rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.15rem;line-height:1.7;color:var(--muted)">“I decided to build a screensaver that quietly shows flight information, so people feel connected without any effort.”</p>
+        <p style="margin-top:1.75rem"><strong>角色</strong>：獨立構思與拍板（方向、視覺、取捨、風險）。AI 協作研究彙整、草稿、實作——規則見下。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A0 AI -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · AI</span>
+      <h2 class="cs-sec-headline">四個工具、各司其職，我是每一關的守門人。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">協作</span>
+      <div class="cs-text-body">
+        <p>沒有丟一個 prompt 等結果。四個工具、各司其職，我是每一關的守門人：</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>工具</th>
+              <th>職責</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">Claude</td>
+              <td>第一輪發想：拆問題、彙整市場調查、規格草稿、技術取捨初案</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Perplexity</td>
+              <td>查證支撐：找一手文件、論文/研究，核實市場調查與設計論述裡的主張站不站得住腳</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Grok</td>
+              <td>只挑錯：不重做發想；審事實、假設、風險</td>
+            </tr>
+            <tr>
+              <td class="cue-name">Cursor</td>
+              <td>只執行「已通過檢驗」的任務包，不在檢驗前自由發揮</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:1.75rem">選 Perplexity 做查證工具的原因很直接：一般 AI 回答問題時偶爾會講得煞有其事但查無出處，Perplexity 的回答會附上來源——這讓我可以自己回頭核實，而不是照單全收。這對一份會被檢視的作品集論述特別重要：市場調查裡「空缺在哪」的主張、設計論述裡引用的研究，都需要能被追溯到真實文件，不能只是「AI說的」。</p>
+        <p style="margin-top:2rem"><strong>守門實例</strong>（不是流程展示，是判斷本身）</p>
+        <ol class="cs-process-steps" style="list-style:none;margin-top:0.5rem">
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">01</span>
+            <p class="cs-proc-desc"><strong>Perplexity MCP 一直 404。</strong> 沒有等工具修好、也沒有拿 AI 沒查證過的記憶充數——改成自己開網頁手動查證，把資料補回研究裡。判斷點：工具失靈時，「先求有再求證」跟「乾脆手動做」之間，我選後者，因為這份市場調查最終要撐住「這個空缺是真的」這個主張，禁不起用未查證的資料墊底。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">02</span>
+            <p class="cs-proc-desc"><strong>草稿想把 adsbdb 的 rate limit 寫成一個具體數字。</strong> 這個數字沒有一手文件核實過，只是 AI 推測的合理值。我要求「未經一手核實的數字不能寫死」，改成保守用詞（「遠低於官方 1 req/s 上限」這種可查證但不誇口的講法）。判斷點：作品集會被檢視，一個查不到出處的數字比沒有數字更傷論述可信度。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">03</span>
+            <p class="cs-proc-desc"><strong>AI 找到不利先例 Airframe。</strong> 比較安全的做法是避而不談、讓讀者以為這個念頭是原創的。我選擇正面處理：承認 Airframe 更早做過「頭頂最近一架」這個概念，把差異收斂成「載體（螢保 vs 硬體）+ 執行（編輯排版 vs 電子紙）」。判斷點：找不到對手不代表贏了；願不願意正面迎戰找到的對手，才是產品判斷力的展示，而不是市場調查做得夠不夠勤。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">04</span>
+            <p class="cs-proc-desc"><strong>視覺定案後，我在文件裡標註凍結。</strong> 明確告訴 AI「文字大小/排版已經對了，除非我再說，不要碰」，把 AI 之後的自由度收在資料層與背景效果上。判斷點：AI 沒有「夠好就停」的內建判斷，會傾向持續微調到看不出差異為止；凍結是我主動畫線，不是 AI 自己收斂的。</p>
+          </li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <aside class="cs-insight reveal">
+    <span class="cs-insight-label">Principle</span>
+    <p class="cs-insight-text">AI 加速草稿與實作；通過與否由我決定。</p>
+  </aside>
+
+  <!-- A1 + A2 -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · Research &amp; Design</span>
+      <h2 class="cs-sec-headline">先查證市場是不是真的空，再決定用什麼框架撐住「安靜」。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">調查方法</span>
+      <div class="cs-text-body">
+        <ol class="cs-process-steps" style="list-style:none">
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">01</span>
+            <p class="cs-proc-desc"><strong>先定義問題本身，不急著查工具。</strong> 缺的到底是「追飛機」這個功能，還是「不用主動查就能被動看見」這種體驗？如果問題定義錯了，後面查再多競品也是白工。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">02</span>
+            <p class="cs-proc-desc"><strong>掃描主流 App 的產品邏輯與載體</strong>（FlightRadar24、Plane Finder、FlightAware），確認它們的核心假設是「使用者會主動打開來查」——這個假設本身就是市場結構的限制，不是隨便寫的形容詞。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">03</span>
+            <p class="cs-proc-desc"><strong>補查 Maker／報導／GitHub</strong>（Airframe、FlightTracker 等），刻意找對自己主張不利的先例，避免自己說服自己「市場是空的」。這一步是為了讓 S 段的定位句禁得起最直接的反駁：「這不是早有人做過了嗎？」</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">04</span>
+            <p class="cs-proc-desc"><strong>一手文件核實 API 條款</strong>（airplanes.live 的 rate limit、使用條款），沒有一手來源核實的數字，就不寫進對外文件——寧可用保守、可驗證的措辭，也不要寫一個查無出處但看起來更精確的數字。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">05</span>
+            <p class="cs-proc-desc"><strong>收斂成一句禁得起挑戰的定位句</strong>：承認先例存在，把差異壓縮到「螢保這個載體」+「編輯排版這種美學執行」兩點，而不是空泛地說「市面上沒有」。</p>
+          </li>
+        </ol>
+      </div>
+    </div>
+    <div class="cs-text-grid" style="margin-top:4rem">
+      <span class="cs-text-label">設計</span>
+      <div class="cs-text-body">
+        <p>依據三個框架，各一句，再往下落到具體數字：</p>
+        <ul class="gioia-bullets">
+          <li><strong>Calm technology</strong>（Weiser &amp; Brown, 1995）：資訊留在注意力周邊，需要時才進中心；原文動機本就是對抗資訊過載造成的焦慮，不只是省注意力。</li>
+          <li><strong>Soft fascination</strong>（注意力恢復，Kaplan &amp; Kaplan, 1989）：不費力的輕刺激（如看雲）讓長時間專注後的注意力休息，這是這個產品被放在「待機/鎖屏」情境的理由——它要服務的是休息時刻，不是再多一個要處理的資訊源。</li>
+          <li><strong>Ambient intimacy / social snacking</strong>（Reichelt, 2007；Gardner, Pickett &amp; Knowles, 2005）：被動接觸他人存在的象徵物，即使不互動，也能降低孤立感——陌生人的班機悄悄浮現，暗示「這世界上還有人在移動、生活」，像是有人悄悄關心著使用者。</li>
+        </ul>
+        <p style="margin-top:1.75rem"><strong>這三個框架怎麼變成實際的視覺決策：</strong></p>
+        <ul class="gioia-bullets">
+          <li><strong>喚醒度由亮度/飽和度決定，色相是次要的</strong>（Valdez &amp; Mehrabian, 1994）——這是近黑背景（<code>rgb(0.02, 0.02, 0.025)</code>）+ 銀白低飽和文字的依據，不需要靠「冷色調」這種刻板印象來製造安靜感，直接壓低亮度與飽和度就夠了。</li>
+          <li><strong>文字層級用比例透明度遞減，不是等差遞減</strong>：callsign 0.82 → airline 0.48 → meta 0.34 → monogram 0.28。這個比例遞減對應的是人眼對亮度差異的非線性感知（Weber-Fechner）——在低對比環境裡，等比例遞減能讓每一級差異感覺均勻，而不是靠加大對比硬做出層級。</li>
+          <li><strong>無卡片、無邊框、無 icon 的極簡疊層</strong>（aesthetic-usability effect, Kurosu &amp; Kashimura, 1995）：使用者會把視覺上的克制直接解讀為「這東西不會來煩我」，這對一個要出現在鎖屏/待機情境的產品是硬性要求——使用情境本身就要求「不打擾」。</li>
+          <li><strong>動效只服務真正的資訊變化</strong>：新航班淡入 ≤0.4 秒、同航班更新則無動效、多分鐘週期的 4–6px 防燒屏漂移、尊重「減少動態」系統設定。低喚醒環境裡任何無謂動效都會被感知成干擾，所以只在真的有新資訊時才動。</li>
+        </ul>
+        <p style="margin-top:1.25rem">螢保硬限制：<strong>滑鼠或按鍵會直接退出</strong>，沒有「點一下展開更多」的中間態，所以不能設計任何依賴滑鼠停留/點擊展開的漸進揭露。因此揭露被簡化成誠實的兩態：</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>態</th>
+              <th>行為</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">無飛機</td>
+              <td>近乎全黑</td>
+            </tr>
+            <tr>
+              <td class="cue-name">有飛機</td>
+              <td>顯示 callsign／航司／高度／方位；<strong>只要仍在範圍內就持續顯示</strong>（約 90 秒輪詢更新），離開範圍或無航班才退回全黑</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:1.5rem">趣味來自事件稀有性（真的有一架經過），不靠互動堆疊或動畫討好；抓不到資料時靜默全黑，不跳錯誤訊息——安靜的失敗方式，也是「不打擾」原則的一部分。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A3 + A4 -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · Data &amp; Build</span>
+      <h2 class="cs-sec-headline">WebView 三次失敗後，整個架構搬到原生。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">資料真實性</span>
+      <div class="cs-text-body">
+        <ul class="gioia-bullets">
+          <li><strong>源</strong>：airplanes.live（即時位置）+ adsbdb（航司／航線資訊）。</li>
+          <li><strong>半徑 40 km、高度門檻、90 秒輪詢</strong>——這三個數字是取捨的結果：半徑太小容易長時間全黑（體驗上像壞掉），太大又會顯示明顯不在「頭頂」的班機，違背產品的核心主張；90 秒輪詢遠低於 airplanes.live 公開的 1 req/s 上限，用寬裕的安全邊際換取「不需要擔心被限流」的穩定性，代價是資料不是秒級即時——但這款產品要的是「安靜的環境事實」，不是追蹤儀表板，秒級即時本來就不是目標。</li>
+          <li><strong>無 GPS 時 fallback 固定座標</strong>（本機 Wembley Park），並在文件中說明使用者可自行更改，不是寫死不能改的假設。</li>
+          <li><strong>已驗證多班真實 callsign，可對照 API 核實</strong>——這是整個「頭頂航班」主張的底線：如果班機資訊是假的，整個產品的核心主張就會崩塌。這個產品要給的感受是「真的有一個陌生人此刻正飛過你頭頂」，這份連結必須是真的，否則就只是裝飾。作品集 mockup 可以美，但資料造假就等於主張本身不成立。</li>
+          <li><strong>定性</strong>：非商業／作品集用途；任何未經一手核實的限額數字，寧可保守也不寫死（呼應 A0 的守門實例 2）。</li>
+        </ul>
+        <p style="margin-top:1.5rem;font-family:'Cormorant Garamond',serif;font-style:italic;font-size:1.15rem;line-height:1.7;color:var(--muted)">“If the flight data were fake, the whole point of the project would break — the connection has to be real, or it's just decoration.”</p>
+      </div>
+    </div>
+    <div class="cs-text-grid" style="margin-top:3.5rem">
+      <span class="cs-text-label">技術串接</span>
+      <div class="cs-text-body">
+        <div class="pipeline"><strong>位置</strong>（或 fallback）
+  → <strong>airplanes.live</strong>（最近一架，90s 輪詢）
+  →（可選）<strong>adsbdb</strong> 航司／航線
+  → <strong>macOS .saver</strong>
+       URLSession 資料 · AppKit 字 · Core Image 背景
+  → 系統設定 → 自訂螢保</div>
+        <p style="margin-top:1.75rem">最初的路線是全部用 WebView 處理（畫面、文字、資料請求），在 <code>legacyScreenSaver</code> 這個環境裡連續踩坑，逼著整個架構改道：</p>
+        <ol class="cs-process-steps" style="list-style:none;margin-top:0.5rem">
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">01</span>
+            <p class="cs-proc-desc"><strong>WebView 的 <code>fetch</code> 不可靠</strong>——同一份程式碼在一般瀏覽器正常，在螢保環境時常靜默失敗，沒有明確錯誤可抓。改法：資料請求全部改用原生 <code>NSURLSession</code>。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">02</span>
+            <p class="cs-proc-desc"><strong>WebView 文字動畫會卡死</strong>——<code>requestAnimationFrame</code> 與 opacity 過渡在這個環境會凍結不動，導致文字淡入效果直接失效。改法：文字改用原生 AppKit <code>NSTextField</code>，動效交給 AppKit 自己的動畫機制處理。</p>
+          </li>
+          <li class="cs-proc-step">
+            <span class="cs-proc-num">03</span>
+            <p class="cs-proc-desc"><strong>WebView 背景常常不畫出來</strong>——整個畫面偶爾只剩空白，背景層完全不渲染。改法：背景改用原生 Core Image（Etheral Shadow 風格：灰階遮罩 + 扭曲 + noise）。</p>
+          </li>
+        </ol>
+        <p style="margin-top:1.5rem">三個坑加起來的結論是<strong>雙層原生</strong>：AppKit 文字 + Core Image 背景 + URLSession 資料，WebView 整個退出主路徑。這個決定的代價是失去了「用網頁技術快速迭代畫面」的彈性，換來的是螢保環境下真正穩定可用——只替換螢保內容本身，不改使用者在系統設定裡自訂的啟動等待時間。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- A5 -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Action · Ship</span>
+      <h2 class="cs-sec-headline">作品要能被朋友裝起來，不是只能在自己的 Mac 上跑。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">交付</span>
+      <div class="cs-text-body">
+        <ul class="gioia-bullets">
+          <li><strong>GitHub public</strong>：<a href="https://github.com/rowanlin801229/overhead-flights" target="_blank" rel="noopener">rowanlin801229/overhead-flights</a> ——選擇公開而不是私下分享，是因為作品集主張「資料是真的」，公開原始碼讓這句話可以被檢驗，不是單方面宣稱。</li>
+          <li><strong><code>macos/build-and-install.sh</code></strong>：一鍵建置安裝腳本，設計對象是「有 Xcode 但不熟這個專案細節的朋友」，不是只有我自己看得懂的內部工具。</li>
+          <li><strong>README 三步驟 + Gatekeeper 處理</strong>：因為專案未經開發者簽名，macOS 會擋下未簽名程式，README 必須把繞過 Gatekeeper 的步驟寫清楚，不能假設使用者知道怎麼處理這個警告。</li>
+          <li><strong>作品集資產</strong>：主形象 mockup、<code>overhead-flights-demo.mp4</code>（無機全黑 → 淡入有機畫面）、hero 靜態圖，交付時特別保留「全黑到出現」這個轉場，因為這正是整個產品體驗的核心時刻。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- R -->
+  <section class="cs-section reveal">
+    <div class="cs-sec-header">
+      <span class="cs-sec-label">Result</span>
+      <h2 class="cs-sec-headline">安靜的環景顯示，不是儀表板。</h2>
+    </div>
+    <div class="cs-text-grid">
+      <span class="cs-text-label">成果</span>
+      <div class="cs-text-body">
+        <p>安靜的 ambient display：不靠打斷搶注意力；有飛機時給克制提示，沒有就全黑。把「頭頂有飛機」變成可被注意、不強迫接收的環境事實。</p>
+        <table class="findings-table">
+          <thead>
+            <tr>
+              <th>目標</th>
+              <th>結果</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="cue-name">產品可安裝</td>
+              <td class="status-ok">✅ <code>.saver</code> 可裝、系統「自訂」可選</td>
+            </tr>
+            <tr>
+              <td class="cue-name">顯示真實航班，不是模擬</td>
+              <td class="status-ok">✅ 多班真實 callsign，可對照 airplanes.live</td>
+            </tr>
+            <tr>
+              <td class="cue-name">輪詢符合公開條款精神</td>
+              <td class="status-ok">✅ 90 秒輪詢，低於官方 1 req/s 上限</td>
+            </tr>
+            <tr>
+              <td class="cue-name">視覺是編輯排版，不是追蹤工具</td>
+              <td class="status-ok">✅ near-black + AppKit 字；無地圖／列表／terminal 綠</td>
+            </tr>
+            <tr>
+              <td class="cue-name">第三人可依文件安裝</td>
+              <td class="status-warn">⚠️ README 與腳本已就緒；尚無朋友實測回報，待補</td>
+            </tr>
+            <tr>
+              <td class="cue-name">定位禁得起挑戰</td>
+              <td class="status-ok">✅ 正面處理 Airframe；差異收斂為載體與美學執行</td>
+            </tr>
+          </tbody>
+        </table>
+        <p style="margin-top:2rem"><strong>限制</strong>：未簽名會遇 Gatekeeper；無 GPS 用 fallback 座標；僅 macOS；adsbdb 確切 rate limit 無一手數字，維持保守用詞。</p>
+        <p style="margin-top:1.5rem"><strong>學到什麼</strong></p>
+        <ul class="gioia-bullets">
+          <li>陌生執行環境（<code>legacyScreenSaver</code>）不能假設 Web 技術棧行為照搬——應更早做技術驗證。</li>
+          <li>找不到直接對手 ≠ 贏了；找到 Airframe 後仍願意正面處理、論述站得住，才是產品判斷。</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <!-- META -->
+  <footer>
+    <div class="footer-meta">
+      <strong style="color:var(--fg);font-weight:400">Role</strong> · UI/UX &amp; Product Designer——獨立構思、市場調查方向、視覺與技術取捨拍板<br>
+      <strong style="color:var(--fg);font-weight:400">AI tools</strong> · Claude（發想／研究彙整／草稿）· Perplexity（查證一手文件與研究）· Grok（檢驗／挑戰假設）· Cursor（執行已通過的任務包）；研究遇阻時改手動／Web 查證<br>
+      <strong style="color:var(--fg);font-weight:400">資料源</strong> · <a href="https://airplanes.live" target="_blank" rel="noopener">airplanes.live</a> · <a href="https://adsbdb.com" target="_blank" rel="noopener">adsbdb</a>（致謝 PlaneBase / David J Taylor, Edinburgh）
+    </div>
+    <div>
+      <a href="https://github.com/rowanlin801229/overhead-flights" target="_blank" rel="noopener">GitHub ↗</a>
+    </div>
+  </footer>
+
+  <script>
+    (function () {
+      var nodes = document.querySelectorAll('.reveal');
+      if (!('IntersectionObserver' in window)) {
+        nodes.forEach(function (n) { n.classList.add('in'); });
+        return;
+      }
+      var io = new IntersectionObserver(function (entries) {
+        entries.forEach(function (e) {
+          if (e.isIntersecting) {
+            e.target.classList.add('in');
+            io.unobserve(e.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -5% 0px' });
+      nodes.forEach(function (n) { io.observe(n); });
+    })();
+  </script>
+</body>
+</html>

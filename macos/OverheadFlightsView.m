@@ -324,11 +324,17 @@ static CGFloat OFMapRange(CGFloat v, CGFloat inMin, CGFloat inMax, CGFloat outMi
 @property (nonatomic, strong) NSTextField *monogramLabel;
 @property (nonatomic, strong) NSTextField *callsignLabel;
 @property (nonatomic, strong) NSTextField *airlineLabel;
+@property (nonatomic, strong) NSTextField *destinationLabel;
 @property (nonatomic, strong) NSTextField *metaLabel;
 @property (nonatomic, strong) NSLayoutConstraint *stackCenterY;
 @property (nonatomic, strong) NSTimer *driftTimer;
 @property (nonatomic, copy) NSString *lastShownCallsign;
 @property (nonatomic, assign) NSTimeInterval driftPhase;
+
+// Route lookup (adsbdb) — separate async call from position; best-effort, often has no data.
+@property (nonatomic, strong) NSURLSessionDataTask *destTask;
+@property (nonatomic, copy) NSString *destInFlightCallsign;
+@property (nonatomic, strong) NSMutableDictionary<NSString *, id> *destCache;
 
 // Settings grid only
 @property (nonatomic, strong) NSStackView *placeholderStack;
@@ -425,6 +431,7 @@ static double OFBearingDeg(double lat1, double lon1, double lat2, double lon2) {
     [self.pollTimer invalidate];
     [self.driftTimer invalidate];
     [self.inflightTask cancel];
+    [self.destTask cancel];
 }
 
 - (void)commonInit {
@@ -524,10 +531,11 @@ static double OFBearingDeg(double lat1, double lon1, double lat2, double lon2) {
 #pragma mark - Live full-screen UI (impeccable: quiet ambient type)
 
 // Soft silver hierarchy — DESIGN.md (not pure white on pure black).
-static const CGFloat kOFWhiteMonogram = 0.28;
-static const CGFloat kOFWhiteCallsign = 0.82;
-static const CGFloat kOFWhiteAirline  = 0.48;
-static const CGFloat kOFWhiteMeta     = 0.34;
+static const CGFloat kOFWhiteMonogram    = 0.28;
+static const CGFloat kOFWhiteCallsign    = 0.82;
+static const CGFloat kOFWhiteAirline     = 0.48;
+static const CGFloat kOFWhiteDestination = 0.36;
+static const CGFloat kOFWhiteMeta        = 0.34;
 
 - (NSTextField *)of_emptyLabel {
     NSTextField *t = [NSTextField labelWithString:@""];
@@ -604,12 +612,14 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     // Hierarchy ratios (DESIGN.md): monogram whisper, callsign hero, quiet secondaries.
     CGFloat monoSize = callsignSize * 0.20;
     CGFloat airlineSize = callsignSize * 0.30;
+    CGFloat destinationSize = callsignSize * 0.26;
     CGFloat metaSize = callsignSize * 0.24;
 
     // Re-apply current strings with new metrics if any text is showing.
     NSString *mono = self.monogramLabel.stringValue;
     NSString *cs = self.callsignLabel.stringValue;
     NSString *air = self.airlineLabel.stringValue;
+    NSString *dest = self.destinationLabel.stringValue;
     NSString *meta = self.metaLabel.stringValue;
 
     // If using attributed strings, stringValue may still work.
@@ -622,6 +632,9 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     if (self.airlineLabel.attributedStringValue.length) {
         air = self.airlineLabel.attributedStringValue.string;
     }
+    if (self.destinationLabel.attributedStringValue.length) {
+        dest = self.destinationLabel.attributedStringValue.string;
+    }
     if (self.metaLabel.attributedStringValue.length) {
         meta = self.metaLabel.attributedStringValue.string;
     }
@@ -633,6 +646,8 @@ static const CGFloat kOFWhiteMeta     = 0.34;
                     weight:NSFontWeightUltraLight white:kOFWhiteCallsign kern:0.08 mono:NO monoDigits:YES];
         [self of_applyText:air toLabel:self.airlineLabel size:airlineSize
                     weight:NSFontWeightLight white:kOFWhiteAirline kern:0.06 mono:NO monoDigits:NO];
+        [self of_applyText:dest toLabel:self.destinationLabel size:destinationSize
+                    weight:NSFontWeightLight white:kOFWhiteDestination kern:0.06 mono:NO monoDigits:NO];
         [self of_applyText:meta toLabel:self.metaLabel size:metaSize
                     weight:NSFontWeightLight white:kOFWhiteMeta kern:0.10 mono:NO monoDigits:NO];
     }
@@ -642,6 +657,7 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     [self.liveStack setCustomSpacing:callsignSize * 0.06 afterView:self.monogramLabel];
     [self.liveStack setCustomSpacing:callsignSize * 0.16 afterView:self.callsignLabel];
     [self.liveStack setCustomSpacing:callsignSize * 0.10 afterView:self.airlineLabel];
+    [self.liveStack setCustomSpacing:callsignSize * 0.10 afterView:self.destinationLabel];
 
     if (self.stackCenterY) {
         // Sit below geometric center so lock-screen clock keeps the upper third.
@@ -686,11 +702,13 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     self.monogramLabel = [self of_emptyLabel];
     self.callsignLabel = [self of_emptyLabel];
     self.airlineLabel = [self of_emptyLabel];
+    self.destinationLabel = [self of_emptyLabel];
     self.metaLabel = [self of_emptyLabel];
 
     [stack addArrangedSubview:self.monogramLabel];
     [stack addArrangedSubview:self.callsignLabel];
     [stack addArrangedSubview:self.airlineLabel];
+    [stack addArrangedSubview:self.destinationLabel];
     [stack addArrangedSubview:self.metaLabel];
 
     CGFloat sidePad = MAX(20, self.bounds.size.width * 0.06);
@@ -734,13 +752,18 @@ static const CGFloat kOFWhiteMeta     = 0.34;
 
 - (void)showEmpty {
     self.lastShownCallsign = nil;
+    [self.destTask cancel];
+    self.destTask = nil;
+    self.destInFlightCallsign = nil;
     self.monogramLabel.stringValue = @"";
     self.callsignLabel.stringValue = @"";
     self.airlineLabel.stringValue = @"";
+    self.destinationLabel.stringValue = @"";
     self.metaLabel.stringValue = @"";
     self.monogramLabel.hidden = YES;
     self.callsignLabel.hidden = YES;
     self.airlineLabel.hidden = YES;
+    self.destinationLabel.hidden = YES;
     self.metaLabel.hidden = YES;
     [NSAnimationContext runAnimationGroup:^(NSAnimationContext *ctx) {
         ctx.duration = [self of_reduceMotion] ? 0 : 0.45;
@@ -773,6 +796,15 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     BOOL isNew = ![cs isEqualToString:self.lastShownCallsign ?: @""];
     self.lastShownCallsign = cs;
 
+    if (isNew) {
+        // New flight — any in-flight route lookup was for the previous plane; drop it.
+        [self.destTask cancel];
+        self.destTask = nil;
+        self.destInFlightCallsign = nil;
+        self.destinationLabel.stringValue = @"";
+        self.destinationLabel.hidden = YES;
+    }
+
     self.lastTypographySize = -1; // force type reflow
     [self updateTypographyForBounds];
 
@@ -791,6 +823,8 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     self.airlineLabel.hidden = (air.length == 0);
     self.metaLabel.hidden = NO;
 
+    [self fetchDestinationForCallsign:cs];
+
     if (isNew) {
         self.liveStack.alphaValue = 0;
         [NSAnimationContext runAnimationGroup:^(NSAnimationContext *ctx) {
@@ -803,6 +837,112 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     }
 
     OFLog([NSString stringWithFormat:@"UI show %@", cs]);
+}
+
+#pragma mark - Route / destination lookup (adsbdb — separate from position, often has no data)
+
+- (NSMutableDictionary<NSString *, id> *)destCache {
+    if (!_destCache) {
+        _destCache = [NSMutableDictionary dictionary];
+    }
+    return _destCache;
+}
+
+static NSString *OFRouteLabel(NSDictionary *place) {
+    if (![place isKindOfClass:[NSDictionary class]]) { return @""; }
+    NSString *city = [place[@"municipality"] isKindOfClass:[NSString class]] ? place[@"municipality"] : @"";
+    NSString *iata = [place[@"iata_code"] isKindOfClass:[NSString class]] ? place[@"iata_code"] : @"";
+    NSString *name = [place[@"name"] isKindOfClass:[NSString class]] ? place[@"name"] : @"";
+    if (city.length && iata.length) { return [NSString stringWithFormat:@"%@ (%@)", city, iata]; }
+    if (city.length) { return city; }
+    if (iata.length) { return iata; }
+    if (name.length) { return name; }
+    return @"";
+}
+
+// Session-cached, keyed by callsign. Cache also stores "" for a lookup with no route data,
+// so we don't refetch a private/GA/military flight that adsbdb simply has nothing for.
+- (void)fetchDestinationForCallsign:(NSString *)cs {
+    if (cs.length == 0) { return; }
+
+    id cached = self.destCache[cs];
+    if (cached) {
+        if ([cached isKindOfClass:[NSString class]] &&
+            ((NSString *)cached).length > 0 &&
+            [cs isEqualToString:self.lastShownCallsign]) {
+            [self applyDestinationText:(NSString *)cached];
+        }
+        return;
+    }
+
+    if ([self.destInFlightCallsign isEqualToString:cs]) { return; }
+    self.destInFlightCallsign = cs;
+
+    NSString *encoded = [cs stringByAddingPercentEncodingWithAllowedCharacters:NSCharacterSet.URLPathAllowedCharacterSet] ?: cs;
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://api.adsbdb.com/v0/callsign/%@", encoded]];
+    if (!url) {
+        self.destInFlightCallsign = nil;
+        return;
+    }
+
+    NSMutableURLRequest *req = [NSMutableURLRequest requestWithURL:url];
+    req.timeoutInterval = 15;
+    [req setValue:@"application/json" forHTTPHeaderField:@"Accept"];
+    [req setValue:@"OverheadFlights-macOS/1.0" forHTTPHeaderField:@"User-Agent"];
+
+    [self.destTask cancel];
+
+    __weak typeof(self) weakSelf = self;
+    NSURLSessionDataTask *task = [[NSURLSession sharedSession] dataTaskWithRequest:req
+        completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        __strong typeof(weakSelf) self = weakSelf;
+        if (!self) { return; }
+
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if ([self.destInFlightCallsign isEqualToString:cs]) {
+                self.destInFlightCallsign = nil;
+            }
+
+            NSString *routeText = @"";
+            NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
+            if (!error && data.length > 0 && http.statusCode >= 200 && http.statusCode < 300) {
+                id root = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+                NSDictionary *route = nil;
+                if ([root isKindOfClass:[NSDictionary class]]) {
+                    id resp = root[@"response"];
+                    if ([resp isKindOfClass:[NSDictionary class]]) {
+                        route = resp[@"flightroute"];
+                    }
+                }
+                if ([route isKindOfClass:[NSDictionary class]]) {
+                    NSString *origin = OFRouteLabel(route[@"origin"]);
+                    NSString *dest = OFRouteLabel(route[@"destination"]);
+                    if (origin.length && dest.length) {
+                        routeText = [NSString stringWithFormat:@"%@ → %@", origin, dest];
+                    } else {
+                        routeText = dest.length ? dest : origin;
+                    }
+                }
+            }
+
+            self.destCache[cs] = routeText;
+
+            // Guard against the plane having already left / changed by the time this resolves.
+            if (routeText.length > 0 && [cs isEqualToString:self.lastShownCallsign]) {
+                [self applyDestinationText:routeText];
+            }
+        });
+    }];
+    self.destTask = task;
+    [task resume];
+}
+
+- (void)applyDestinationText:(NSString *)text {
+    if (!self.destinationLabel || text.length == 0) { return; }
+    CGFloat callsignSize = [self of_callsignPointSize];
+    [self of_applyText:text toLabel:self.destinationLabel size:callsignSize * 0.26
+                weight:NSFontWeightLight white:kOFWhiteDestination kern:0.06 mono:NO monoDigits:NO];
+    self.destinationLabel.hidden = NO;
 }
 
 - (void)startAnimation {
@@ -839,6 +979,9 @@ static const CGFloat kOFWhiteMeta     = 0.34;
     [self.bgView stopAnimating];
     [self.inflightTask cancel];
     self.inflightTask = nil;
+    [self.destTask cancel];
+    self.destTask = nil;
+    self.destInFlightCallsign = nil;
 }
 
 - (void)animateOneFrame {

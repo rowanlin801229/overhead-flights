@@ -860,17 +860,15 @@ static NSString *OFRouteLabel(NSDictionary *place) {
     return @"";
 }
 
-// Session-cached, keyed by callsign. Cache also stores "" for a lookup with no route data,
-// so we don't refetch a private/GA/military flight that adsbdb simply has nothing for.
+// Session-cached, keyed by callsign. Cache also stores an empty route for a lookup with no
+// data, so we don't refetch a private/GA/military flight that adsbdb simply has nothing for.
 - (void)fetchDestinationForCallsign:(NSString *)cs {
     if (cs.length == 0) { return; }
 
-    id cached = self.destCache[cs];
+    NSDictionary *cached = self.destCache[cs];
     if (cached) {
-        if ([cached isKindOfClass:[NSString class]] &&
-            ((NSString *)cached).length > 0 &&
-            [cs isEqualToString:self.lastShownCallsign]) {
-            [self applyDestinationText:(NSString *)cached];
+        if ([cs isEqualToString:self.lastShownCallsign]) {
+            [self applyRouteResult:cached];
         }
         return;
     }
@@ -904,6 +902,7 @@ static NSString *OFRouteLabel(NSDictionary *place) {
             }
 
             NSString *routeText = @"";
+            NSString *iata = @"";
             NSHTTPURLResponse *http = (NSHTTPURLResponse *)response;
             if (!error && data.length > 0 && http.statusCode >= 200 && http.statusCode < 300) {
                 id root = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
@@ -922,19 +921,38 @@ static NSString *OFRouteLabel(NSDictionary *place) {
                     } else {
                         routeText = dest.length ? dest : origin;
                     }
+
+                    NSDictionary *airline = route[@"airline"];
+                    if ([airline isKindOfClass:[NSDictionary class]] &&
+                        [airline[@"iata"] isKindOfClass:[NSString class]]) {
+                        iata = (NSString *)airline[@"iata"];
+                    }
                 }
             }
 
-            self.destCache[cs] = routeText;
+            NSDictionary *result = @{ @"route": routeText, @"iata": iata };
+            self.destCache[cs] = result;
 
             // Guard against the plane having already left / changed by the time this resolves.
-            if (routeText.length > 0 && [cs isEqualToString:self.lastShownCallsign]) {
-                [self applyDestinationText:routeText];
+            if ([cs isEqualToString:self.lastShownCallsign]) {
+                [self applyRouteResult:result];
             }
         });
     }];
     self.destTask = task;
     [task resume];
+}
+
+- (void)applyRouteResult:(NSDictionary *)result {
+    NSString *routeText = [result[@"route"] isKindOfClass:[NSString class]] ? result[@"route"] : @"";
+    NSString *iata = [result[@"iata"] isKindOfClass:[NSString class]] ? result[@"iata"] : @"";
+    if (routeText.length > 0) {
+        [self applyDestinationText:routeText];
+    }
+    // IATA is a nicer monogram than the raw callsign prefix already showing — swap it in when known.
+    if (iata.length > 0) {
+        [self applyMonogramText:iata];
+    }
 }
 
 - (void)applyDestinationText:(NSString *)text {
@@ -943,6 +961,14 @@ static NSString *OFRouteLabel(NSDictionary *place) {
     [self of_applyText:text toLabel:self.destinationLabel size:callsignSize * 0.26
                 weight:NSFontWeightLight white:kOFWhiteDestination kern:0.06 mono:NO monoDigits:NO];
     self.destinationLabel.hidden = NO;
+}
+
+- (void)applyMonogramText:(NSString *)text {
+    if (!self.monogramLabel || text.length == 0) { return; }
+    CGFloat callsignSize = [self of_callsignPointSize];
+    [self of_applyText:text.uppercaseString toLabel:self.monogramLabel size:callsignSize * 0.20
+                weight:NSFontWeightRegular white:kOFWhiteMonogram kern:0.28 mono:YES monoDigits:NO];
+    self.monogramLabel.hidden = NO;
 }
 
 - (void)startAnimation {

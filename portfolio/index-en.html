@@ -506,10 +506,10 @@
       playsinline
       preload="metadata"
       controls
-      aria-label="Overhead Flights demo: empty black sky, then fade in to live flight stack">
+      aria-label="Overhead Flights demo: a real overhead flight with live route data">
     </video>
   </div>
-  <p class="cs-media-caption">Demo — empty black sky, then fade in to a live flight</p>
+  <p class="cs-media-caption">Demo — a real overhead flight (BAW8RM, en route to London)</p>
 
   <!-- S1 MARKET -->
   <section class="cs-section reveal">
@@ -820,7 +820,7 @@
           <li><strong>GitHub public</strong>: <a href="https://github.com/rowanlin801229/overhead-flights" target="_blank" rel="noopener">rowanlin801229/overhead-flights</a> — chosen to be public rather than shared privately, because the portfolio's claim is "this data is real," and making the source public lets that claim actually be checked, rather than just asserted.</li>
           <li><strong><code>macos/build-and-install.sh</code></strong>: a one-command build-and-install script, designed for "a friend who has Xcode but doesn't know this project's internals" — not an internal tool only I can understand.</li>
           <li><strong>Three-step README + Gatekeeper handling</strong>: since the project isn't signed by a developer account, macOS blocks unsigned software by default, so the README has to spell out exactly how to get past the Gatekeeper warning — it can't assume the user already knows how to handle it.</li>
-          <li><strong>Portfolio assets</strong>: the main mockup image, <code>overhead-flights-demo.mp4</code> (empty black sky fading into a live flight), and a static hero image — the "black to appearing" transition was specifically preserved in the deliverable, because that's the actual core moment of the whole product experience.</li>
+          <li><strong>Portfolio assets</strong>: the main mockup image, <code>overhead-flights-demo.mp4</code> (an actual capture of BAW8RM, a flight with a fully resolved route), and a static hero image — chosen because it shows callsign, airline, origin → destination, and altitude/bearing all at once, all real data, not layout placeholders.</li>
         </ul>
       </div>
     </div>
